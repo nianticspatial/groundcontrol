@@ -1,0 +1,15 @@
+name: sat-seva
+channels:
+  - pytorch
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.12
+  - pip
+  - pytorch=2.7.1
+  - torchvision=0.22.1
+  - pytorch-cuda=12.1
+  - numpy=1.26.4
+  - scipy=1.12.0
+  - pip:
+      - -r requirements.txt

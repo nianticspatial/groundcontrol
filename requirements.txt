@@ -1,0 +1,32 @@
+# Inference stack for the satellite-conditioned SEVA checkpoint.
+# Install PyTorch first so the CUDA build matches the machine, then:
+#   pip install -r requirements.txt
+#
+# Versions match the environment used to run this model.
+
+einops==0.8.1
+omegaconf==2.3.0
+pytorch-lightning==2.5.6
+torchmetrics==1.8.2
+diffusers==0.35.2
+huggingface-hub==1.14.0
+safetensors==0.6.2
+open-clip-torch==3.2.0
+kornia==0.8.2
+lpips==0.1.4
+pyquaternion==0.9.9
+numpy==1.26.4
+scipy==1.12.0
+scikit-learn==1.7.2
+matplotlib==3.10.8
+opencv-python==4.12.0
+pillow==11.3.0
+roma==1.5.4
+tqdm==4.67.1
+
+# Dataset SDKs
+metropolis-sdk @ git+https://github.com/mapillary/metropolis_sdk.git
+av2==0.3.5
+
+# Semantic metrics computed during evaluation (SAM feature similarity)
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git

@@ -1,0 +1,2 @@
+from osm_diffusion.semeval.dinov1 import DINOv1SimilarityMeasure
+from osm_diffusion.semeval.segany import SegAnySimilarityMeasure
