@@ -1,7 +1,6 @@
 # GroundControl
 
-Inference for a satellite ray-guided cross-attention SEVA model on Metropolis.
-Checkpoints and datasets are not included; configure paths with environment variables.
+[GroundControl](https://nianticspatial.github.io/groundcontrol/) is a satellite-condtioned multi-view diffusion model. When generating novel views, it uses layout context from the satellite image, when the target viewpoint has low coverage in the input viewpoints. 
 
 ## Setup
 
