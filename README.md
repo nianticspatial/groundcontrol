@@ -1,50 +1,58 @@
-# Satellite-conditioned SEVA inference
+# GroundControl
 
-Standalone inference code for the gated high-resolution satellite-conditioned SEVA checkpoint (`SevaSatRayAttnFusedQuerySeparateBlock`). It loads Metropolis and Argoverse, runs the same evaluation entrypoint as the training repo, and writes generated views plus metrics.
-
-Weights and datasets stay outside this repository.
+Inference for a satellite ray-guided cross-attention SEVA model on Metropolis.
+Checkpoints and datasets are not included; configure paths with environment variables.
 
 ## Setup
 
 ```bash
 mamba env create -f environment.yml
-mamba activate sat-seva
+mamba activate groundcontrol
 pip install -e .
 ```
 
-`environment.yml` installs PyTorch with CUDA 12.1. If that build does not match the machine, install PyTorch separately and then `pip install -r requirements.txt`.
+If the CUDA build in `environment.yml` does not match your machine, install PyTorch separately, then `pip install -r requirements.txt`.
 
-## Weights
+## Environment variables
 
-Set these paths in `src/osm_diffusion/configs/seva_training_raydir_sep_block_ca_metropolis_initcheck_hires_mlp_gated.yaml`, or keep the defaults if the files are already on disk:
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GC_CHECKPOINT` | yes | Fine-tuned checkpoint (`.ckpt`) |
+| `GC_PRETRAINED_WEIGHTS` | yes | Base SEVA / SVC weights directory |
+| `GC_VAE_PATH` | yes | SD 2.1 VAE directory |
+| `GC_CLIP_HF_HUB` | yes | Local Hugging Face hub cache for CLIP |
+| `METROPOLIS_DATA_DIR` | yes | Metropolis dataset root |
+| `METROPOLIS_SATELLITE_DIR` | yes | Preprocessed satellite images |
+| `DINOV3_REPO` | yes | Local DINOv3 torch.hub checkout |
+| `DINOV3_WEIGHTS` | yes | DINOv3 ViT-L/16 weights file |
+| `GC_OUTPUT_DIR` | no | Results directory (default `outputs/metropolis`) |
+| `GC_DINO_WEIGHTS` | no | DINOv1 weights for semantic metrics |
+| `GC_SAM_WEIGHTS` | no | Segment Anything weights for semantic metrics |
 
-| Config key | What it is |
-| --- | --- |
-| `paths.pretrained_weights_path` | Base SEVA `model.safetensors` directory |
-| `paths.vae_ckpt_path` | Stable Diffusion 2.1 VAE directory |
-| `paths.clip_hf_hub_path` | OpenCLIP cache (`ViT-H-14`, `laion2b_s32b_b79k`) |
+## Run
 
-The finetuned checkpoint is passed on the command line, not stored in the config. The Metropolis run below uses `ft_updated_svc_sat_ca_hires_gated_new_mlp/checkpoints/eval1.ckpt`.
+All run settings are in `src/osm_diffusion/configs/infer_metropolis.yaml`
+(model `satellite_ray_guided_ca`, dual CFG sat=3 / img=2).
 
-Semantic metrics also expect Segment Anything weights at `/mnt/nas/shared/projects/sem_eval/sam_vit_h_4b8939.pth`.
+```bash
+export GC_CHECKPOINT=...
+export GC_PRETRAINED_WEIGHTS=...
+export GC_VAE_PATH=...
+export GC_CLIP_HF_HUB=...
+export METROPOLIS_DATA_DIR=...
+export METROPOLIS_SATELLITE_DIR=...
+export DINOV3_REPO=...
+export DINOV3_WEIGHTS=...
 
-## Data
+python -m osm_diffusion.training.eval \
+  --config src/osm_diffusion/configs/infer_metropolis.yaml
+```
 
-Dataset roots are in:
-
-- `src/osm_diffusion/configs/datasets/eval/metropolis.yaml`
-- `src/osm_diffusion/configs/datasets/eval/argoverse.yaml`
-
-Metropolis inference uses the precomputed DINOv3 satellite features in `dino_satellite_feats_dir`. Pass `--compute_dino_features` only if you want to encode satellite images on the fly; that path needs `DINOV3_REPO` and `DINOV3_WEIGHTS`.
-
-## Metropolis inference
+Optional overrides: `--checkpoint-path`, `--output-path`, `--limit-val-batches`.
 
 ```bash
 bash scripts/infer_metropolis.sh
+bash scripts/infer_metropolis.sh --limit-val-batches 1
 ```
 
-Optional overrides: `CKPT`, `RES` (`W,H`), `OUTPUT_DIR`. Extra arguments are forwarded to `osm_diffusion.training.eval`.
-
-Images are written under `$OUTPUT_DIR/metropolis_<resolution>_dual_cfg3_img2_baseline/metropolis/<sample_id>/`, and the metrics JSON is written in `$OUTPUT_DIR`.
-
-Argoverse uses the same entrypoint with `--datasets argoverse`.
+`CKPT` and `OUTPUT_DIR` override checkpoint and output directory for the shell wrapper.

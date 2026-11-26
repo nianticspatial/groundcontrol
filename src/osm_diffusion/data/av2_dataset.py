@@ -13,7 +13,6 @@ from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as F
 
 from osm_diffusion.data.generic_mvs_dataset import GenericMVSDataset
-from osm_diffusion.satellite import utils as sat_utils
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +67,6 @@ class ArgoverseDataset(GenericMVSDataset):
                                 f"Missing satellite image for log {log_id} at timestamp {ts}, skipping sample."
                             )
                             continue
-                    if self.use_osm:
-                        osm_available = True
-                        for osm_config in self.osm_configs:
-                            osm_path = (
-                                self.osm_dir / self.mode / log_id / osm_config["name"] / f"{ts}.png"
-                            )
-                            if not osm_path.exists():
-                                print(
-                                    f"Missing OSM image for log {log_id} at timestamp {ts}, skipping sample."
-                                )
-                                osm_available = False
-                                break
-                        if not osm_available:
-                            continue
                     self.samples.append((log_id, ts))
 
     def _get_camera_names(self, log_id) -> List[RingCameras]:
@@ -96,32 +81,6 @@ class ArgoverseDataset(GenericMVSDataset):
 
     def _get_timestamps_for_log(self, log_id: str) -> List[int]:
         return self.log_to_timestamps.get(log_id, [])
-
-    def _get_osm_views(
-        self,
-        log_id: str,
-        timestamp: Any,
-        reference_rotation: Optional[torch.Tensor],
-        views_w_T_cam: Optional[List[torch.Tensor]],
-        intrinsics: Optional[List[torch.Tensor]],
-    ) -> Optional[List[torch.Tensor]]:
-        if not self.use_osm:
-            return None
-
-        osm_images = []
-        for osm_config in self.osm_configs:
-            size, ppm, resolution = osm_config["size"], osm_config["ppm"], osm_config["resolution"]
-            osm_path = self.osm_dir / self.mode / log_id / osm_config["name"] / f"{timestamp}.png"
-            if osm_path.exists():
-                osm_img = np.array(Image.open(osm_path))
-                osm_one_hot = sat_utils.one_hot_encode_raster(osm_img)
-                osm_one_hot = torch.from_numpy(osm_one_hot).to(torch.uint8)
-            else:
-                print(f"Missing OSM image at {osm_path}, appending zeros.")
-                osm_one_hot = torch.zeros(resolution, resolution, 44)
-
-            osm_images.append(osm_one_hot)
-        return osm_images
 
     def _get_satellite_views(
         self,
@@ -184,43 +143,6 @@ class ArgoverseDataset(GenericMVSDataset):
 
         return satellite_images
 
-    def _get_satellite_view_features(
-        self,
-        log_id: str,
-        timestamp: Any,
-    ) -> Optional[List[torch.Tensor]]:
-        dino_features_list = []
-        if self.dino_satellite_feats_dir is None:
-            return dino_features_list
-
-        for sat_config in self.satellite_configs:
-            feat_path = (
-                Path(self.dino_satellite_feats_dir)
-                / self.mode
-                / log_id
-                / sat_config["name"]
-                / f"{timestamp}.npz"
-            )
-            if feat_path.exists():
-                dino_features = torch.from_numpy(np.load(feat_path)["feats"])
-                dino_features = dino_features.reshape(32, 32, 1024)
-                dino_features_list.append(dino_features)
-            else:
-                sat_img_path = (
-                    self.satellite_dir
-                    / self.mode
-                    / log_id
-                    / sat_config["name"]
-                    / f"{timestamp}.png"
-                )
-                if sat_img_path.exists():
-                    raise FileNotFoundError(
-                        f"satellite image exists but DINO features do not for {feat_path}"
-                    )
-                print(f"DINO features not found for {feat_path}, using zeros")
-                dino_features_list.append(torch.zeros(32, 32, 1024, dtype=torch.float32))
-        return dino_features_list
-
     def _process_view(self, view_identifier: Dict) -> Optional[Dict[str, List]]:
         log_id = view_identifier["log_id"]
         timestamp_ns = view_identifier["timestamp"]
@@ -275,24 +197,8 @@ class ArgoverseDataset(GenericMVSDataset):
     def _get_reference_rotation(
         self, log_id: str, timestamp_ns: int, poses: list[torch.Tensor]
     ) -> Optional[torch.Tensor]:
-        """
-        Returns the 3x3 rotation matrix of the ego-vehicle itself as the reference.
-        """
-        # return poses[0][:3, :3]
-        # reference rotation is Z along north (Y city), X along east (X city), Y along down (-Z city)
-
-        # return torch.eye(3, dtype=torch.float32)
-        city_SO3_reference = torch.from_numpy(np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])).float()
-        return city_SO3_reference
-
-        # The ego-vehicle's pose serves as the canonical reference for the sample.
-        city_SE3_ego = self.loader.get_city_SE3_ego(log_id, timestamp_ns)
-        if city_SE3_ego is None:
-            return None
-
-        # Extract the 3x3 rotation from the 4x4 transformation matrix
-        rotation_matrix = city_SE3_ego.transform_matrix[:3, :3]
-        return torch.from_numpy(rotation_matrix).float()
+        """East-north-up reference: Z north, X east, Y down."""
+        return torch.from_numpy(np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])).float()
 
     def _get_reference_translation(
         self, log_id: str, timestamp_ns: int, poses: list[torch.Tensor]

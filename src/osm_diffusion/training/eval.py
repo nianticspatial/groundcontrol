@@ -1,9 +1,7 @@
-# osm_diffusion/training/eval.py
-"""
-Contains the core logic for model evaluation and a command-line interface
-for evaluating a single checkpoint.
+"""Run inference for one satellite-conditioned SEVA checkpoint and save images plus metrics.
 
-The `run_evaluation` function can be imported by other scripts.
+Primary input is a lean inference YAML (see configs/infer_metropolis.yaml).
+Optional CLI flags only override values already set in that config.
 """
 import argparse
 import json
@@ -11,7 +9,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Sequence
 
 import numpy as np
 import pytorch_lightning as pl
@@ -30,12 +28,12 @@ from osm_diffusion.training.ema import EMAUnetAveraging
 
 @dataclass
 class EvaluationConfig:
-    """A dataclass to hold all configuration for a single evaluation run."""
+    """Resolved settings for a single evaluation run."""
 
     checkpoint_path: str | None
     config_path: Path
     output_path: Path
-    datasets: List["str"]  # name or path to dataset configs
+    datasets: List[str]
     num_input_frames: int = 1
     num_total_frames: int = 8
     gpus: int = 1
@@ -47,12 +45,10 @@ class EvaluationConfig:
     datasets_config_path: str = "eval"
     denoising_steps: int = 50
     resolution: tuple[int, int] = (576, 576)
-    compute_dino_features: bool = False
     dual_cfg: bool = False
     sat_cfg_value: float = 2.0
     img_cfg_value: float = 2.0
     use_high_mem_gpu: bool = False
-    # EMA configuration
     use_ema: bool = False
     ema_device: str = "cpu"
     ema_decay: float = 0.999
@@ -65,33 +61,46 @@ class EvaluationConfig:
     zero_satellite: bool = False
 
 
+def _as_resolution(value) -> tuple[int, int]:
+    if isinstance(value, str):
+        parts = [int(x) for x in value.split(",")]
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        parts = [int(x) for x in value]
+    else:
+        parts = [int(value)]
+    if len(parts) == 1:
+        return (parts[0], parts[0])
+    if len(parts) != 2:
+        raise ValueError(f"Resolution must be int or (W,H), got {value!r}")
+    return (parts[0], parts[1])
+
+
+def _first_not_none(*values):
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float]]:
-    """
-    Core, reusable function to evaluate a single checkpoint.
-
-    Args:
-        cfg: An EvaluationConfig object containing all necessary parameters.
-
-    Returns:
-        A list of dictionaries containing the validation metrics.
-    """
+    """Evaluate a single checkpoint using settings resolved from the inference config."""
     if cfg.checkpoint_path is None:
         print("No checkpoint path provided. Using the baseline SEVA model")
     print(f"--- [PID: {Path().owner()}] Running evaluation for: {cfg.checkpoint_path} ---")
     config = OmegaConf.load(cfg.config_path)
+    OmegaConf.resolve(config)
 
-    print("Overriding dataset configurations...")
+    print("Applying evaluation settings from config...")
     config.data.datasets = cfg.datasets
     config.data.ds_config_path = cfg.datasets_config_path
     if config.get("val_data") is not None:
         config.val_data.datasets = cfg.datasets
-    config.data.resolution = cfg.resolution
+    config.data.resolution = list(cfg.resolution)
     config.model.img_h = cfg.resolution[1]
     config.model.img_w = cfg.resolution[0]
     if cfg.validation_debug_dir is not None:
         config.validation.save_validation_camera_specs = True
 
-    # 1. Create validation dataloaders from the config
     print("Creating validation dataloaders...")
 
     random.seed(42)
@@ -107,19 +116,13 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
         zero=cfg.zero_satellite,
     )
     if satellite_perturbations.enabled:
-        conditioning_type = "cached features" if not cfg.compute_dino_features else "images"
         print(
-            "Applying satellite perturbations "
-            f"to {conditioning_type}: rotate={cfg.rotate_satellite}, "
-            f"random_other={cfg.random_satellite}, flip={cfg.flip_satellite}, "
-            f"zero={cfg.zero_satellite}"
+            "Applying satellite perturbations to images: "
+            f"rotate={cfg.rotate_satellite}, random_other={cfg.random_satellite}, "
+            f"flip={cfg.flip_satellite}, zero={cfg.zero_satellite}"
         )
         val_datasets = [
-            SatellitePerturbationDataset(
-                dataset,
-                satellite_perturbations,
-                use_precomputed_features=not cfg.compute_dino_features,
-            )
+            SatellitePerturbationDataset(dataset, satellite_perturbations)
             for dataset in val_datasets
         ]
     collator = dataloader.MultiViewCollator(
@@ -130,7 +133,6 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
         shuffle_images=False,
         use_last_view_as_target_padding=False,
     )
-    # Prefetch factor for evaluation dataloaders
     val_prefetch_factor = config.data.get("val_prefetch_factor", 2)
     val_dataloaders = [
         DataLoader(
@@ -148,14 +150,10 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
         for ds in val_datasets
     ]
 
-    # 2. Initialize the Lightning Module
     print("Initializing Lightning Module...")
 
     config.validation.denoising_steps = cfg.denoising_steps
-    config.model.use_preprocessed_dino_features = not cfg.compute_dino_features
     config.model.use_dual_cfg = cfg.dual_cfg
-    # config.model.sat_cfg_value = cfg.sat_cfg_value
-    # config.model.img_cfg_value = cfg.img_cfg_value
     config.model.cfg_scale_image = cfg.img_cfg_value
     config.model.cfg_scale_sat = cfg.sat_cfg_value
     if cfg.reference_translation_noise_m is not None:
@@ -163,6 +161,8 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
     if cfg.reference_rotation_noise_deg is not None:
         config.model.reference_rotation_noise_deg = cfg.reference_rotation_noise_deg
     config.validation.semeval = True
+    if config.get("lightning") is None:
+        config.lightning = OmegaConf.create({"mixed_precision": "bf16-mixed"})
     lightning_model = seva_lightning_trainer.get_lightning_module(config)
 
     if cfg.validation_debug_dir is not None:
@@ -176,20 +176,19 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
     lightning_model.validation_scale_factors = cfg.pose_scale_factors
     lightning_model.garbage_collection_after_validation_step = True
 
-    # 3. Setup and run the PyTorch Lightning Trainer
     print("Configuring PyTorch Lightning Trainer for validation...")
 
-    # Setup EMA callback if enabled
     callbacks = []
     if cfg.use_ema:
         print(
-            f"[Eval] Setting up EMA callback (device={cfg.ema_device}, decay={cfg.ema_decay}, trainable_only={cfg.ema_trainable_only})"
+            f"[Eval] Setting up EMA callback (device={cfg.ema_device}, decay={cfg.ema_decay}, "
+            f"trainable_only={cfg.ema_trainable_only})"
         )
         callbacks.append(
             EMAUnetAveraging(
                 enabled=True,
                 device=cfg.ema_device,
-                every_n_steps=1,  # Not used during eval, only for training updates
+                every_n_steps=1,
                 start_after_steps=0,
                 decay=cfg.ema_decay,
                 trainable_only=cfg.ema_trainable_only,
@@ -231,7 +230,6 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
             "flip": cfg.flip_satellite,
             "zero": cfg.zero_satellite,
         },
-        # "datasets_config": OmegaConf.to_container(datasets_config, resolve=True),
     }
 
     with open(cfg.output_path, "w") as f:
@@ -246,158 +244,45 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
     return metrics
 
 
-def get_evaluation_config():
-    parser = argparse.ArgumentParser(description="Evaluate a SEVA model checkpoint.")
-    parser.add_argument(
-        "--config", type=Path, required=True, help="Path to the YAML configuration file."
+def get_evaluation_config() -> EvaluationConfig:
+    parser = argparse.ArgumentParser(
+        description="Evaluate a SEVA model from an inference YAML config."
     )
     parser.add_argument(
-        "--datasets",
-        type=str,
-        nargs="+",
-        required=False,
-        help="Names of the eval YAML configuration file.",
-    )
-    parser.add_argument(
-        "--denoising-steps",
-        type=int,
-        required=False,
-        default=50,
-        help="Number of denoising steps to use for evaluation.",
-    )
-    parser.add_argument(
-        "--datasets-config-path",
-        type=str,
-        required=False,
-        default="eval",
-        help="Path to the folder containing the config file relative to configs/.",
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to the inference YAML (model, data, paths, dual-CFG, checkpoint).",
     )
     parser.add_argument(
         "--checkpoint-path",
         type=str,
         default=None,
-        help="Path to the model checkpoint (.ckpt) file.",
+        help="Optional override for inference.checkpoint_path.",
     )
     parser.add_argument(
         "--output-path",
         type=Path,
         default=None,
-        help="Optional: Path to save the results JSON file.",
+        help="Optional override for the results directory (inference.output_dir).",
     )
-    parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use for evaluation.")
     parser.add_argument(
         "--limit-val-batches",
         type=float,
-        default=1.0,
-        help="Fraction of validation batches to evaluate.",
+        default=None,
+        help="Optional override for inference.limit_val_batches.",
     )
     parser.add_argument(
-        "--ds_mode",
-        type=str,
-        default="val",
-        help="Dataset mode to use for evaluation (e.g., 'val', 'test').",
-    )
-    parser.add_argument(
-        "--batch-size",
+        "--gpus",
         type=int,
-        default=1,
-        help="Batch size to use for evaluation.",
+        default=None,
+        help="Optional override for inference.gpus.",
     )
     parser.add_argument(
         "--validation_debug_dir",
         type=str,
         default=None,
-        help="Optional: Directory to save debug information during validation.",
-    )
-    parser.add_argument(
-        "--pose_scale_factors",
-        type=float,
-        nargs="+",
-        default=[2.0],
-        help="Scale factors for the pose (e.g., '1.0 0.5 0.5').",
-    )
-    parser.add_argument(
-        "--num_input_frames",
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        "--num_total_frames",
-        type=int,
-        default=8,
-    )
-    parser.add_argument(
-        "--use_precomputed_satellite_features",
-        type=bool,
-        default=None,
-        help="Whether to use precomputed satellite features.",
-    )
-    parser.add_argument(
-        "--resolution",
-        type=str,
-        default="576,576",
-        help="Resolution to use for evaluation. Format: 'W,H'.",
-    )
-    parser.add_argument(
-        "--compute_dino_features",
-        action="store_true",
-        help="Whether to compute DINO features on-the-fly during evaluation.",
-    )
-    parser.add_argument(
-        "--use_dual_cfg",
-        action="store_true",
-        help="Whether to use dual configuration during evaluation.",
-    )
-    parser.add_argument(
-        "--sat_cfg_value",
-        type=float,
-        default=2.0,
-        help="Configuration value for the satellite model.",
-    )
-    parser.add_argument(
-        "--img_cfg_value",
-        type=float,
-        default=2.0,
-        help="Configuration value for the image model.",
-    )
-    parser.add_argument(
-        "--use_high_mem_gpu",
-        action="store_true",
-        help="Whether to use a high memory GPU for evaluation.",
-    )
-    parser.add_argument(
-        "--use_ema",
-        action="store_true",
-        help="Whether to use EMA (Exponential Moving Average) weights from the checkpoint during evaluation.",
-    )
-    parser.add_argument(
-        "--ema_device",
-        type=str,
-        default="cuda",
-        help="Device to store EMA weights on ('cpu', 'cuda', or 'auto'). Default: 'cpu'",
-    )
-    parser.add_argument(
-        "--ema_decay",
-        type=float,
-        default=0.999,
-        help="EMA decay rate (not used during eval, but should match training config). Default: 0.999",
-    )
-    parser.add_argument(
-        "--ema_trainable_only",
-        action="store_true",
-        help="Whether EMA was trained with trainable_only mode (memory efficient). Should match training config.",
-    )
-    parser.add_argument(
-        "--reference_translation_noise_m",
-        type=float,
-        default=None,
-        help="Optional override for reference-frame translation noise magnitude in meters.",
-    )
-    parser.add_argument(
-        "--reference_rotation_noise_deg",
-        type=float,
-        default=None,
-        help="Optional override for reference-frame yaw noise magnitude in degrees.",
+        help="Optional override for inference.validation_debug_dir.",
     )
     parser.add_argument(
         "--rotate_satellite",
@@ -421,65 +306,84 @@ def get_evaluation_config():
     )
     args = parser.parse_args()
 
-    resolution = tuple(int(x) for x in args.resolution.split(","))
-    assert len(resolution) <= 2, "Resolution must be in the format 'W,H'."
-    if len(resolution) == 1:
-        resolution = (resolution[0], resolution[0])
+    yaml_cfg = OmegaConf.load(args.config)
+    OmegaConf.resolve(yaml_cfg)
+    infer = yaml_cfg.get("inference", OmegaConf.create({}))
+    data = yaml_cfg.get("data", OmegaConf.create({}))
+    model = yaml_cfg.get("model", OmegaConf.create({}))
+    validation = yaml_cfg.get("validation", OmegaConf.create({}))
 
-    ts = datetime.now().isoformat()
-    ckpt_name = Path(args.checkpoint_path).stem if args.checkpoint_path else "seva"
-    if args.output_path:
-        output_path = args.output_path / f"{ckpt_name}_{ts}_eval_results.json"
-    else:
-        assert (
-            args.checkpoint_path is not None
-        ), "Checkpoint path must be provided when output path is not specified."
-        output_path = Path(args.checkpoint_path).parent / f"{ckpt_name}_{ts}_eval_results.json"
+    checkpoint_path = _first_not_none(args.checkpoint_path, infer.get("checkpoint_path"))
+    if checkpoint_path is None:
+        raise ValueError(
+            "checkpoint_path must be set in the inference config or passed via --checkpoint-path."
+        )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # 1. Create the configuration object for the core logic
-    eval_config = EvaluationConfig(
-        checkpoint_path=args.checkpoint_path,
-        config_path=args.config,
-        gpus=args.gpus,
-        limit_val_batches=args.limit_val_batches,
-        output_path=output_path,
-        ds_mode=args.ds_mode,
-        datasets=args.datasets,
-        datasets_config_path=args.datasets_config_path,
-        num_input_frames=args.num_input_frames,
-        num_total_frames=args.num_total_frames,
-        batch_size=args.batch_size,
-        validation_debug_dir=args.validation_debug_dir,
-        pose_scale_factors=args.pose_scale_factors,
-        denoising_steps=args.denoising_steps,
-        resolution=resolution,
-        compute_dino_features=args.compute_dino_features,
-        dual_cfg=args.use_dual_cfg,
-        sat_cfg_value=args.sat_cfg_value,
-        img_cfg_value=args.img_cfg_value,
-        use_high_mem_gpu=args.use_high_mem_gpu,
-        use_ema=args.use_ema,
-        ema_device=args.ema_device,
-        ema_decay=args.ema_decay,
-        ema_trainable_only=args.ema_trainable_only,
-        reference_translation_noise_m=args.reference_translation_noise_m,
-        reference_rotation_noise_deg=args.reference_rotation_noise_deg,
-        rotate_satellite=args.rotate_satellite,
-        random_satellite=args.random_satellite,
-        flip_satellite=args.flip_satellite,
-        zero_satellite=args.zero_satellite,
+    output_dir = Path(
+        _first_not_none(
+            args.output_path,
+            infer.get("output_dir"),
+            Path(checkpoint_path).parent,
+        )
     )
-    return eval_config
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_name = Path(checkpoint_path).stem
+    ts = datetime.now().isoformat()
+    output_path = output_dir / f"{ckpt_name}_{ts}_eval_results.json"
+
+    resolution = _as_resolution(data.get("resolution", [576, 576]))
+    datasets = list(data.get("datasets", ["metropolis"]))
+    if not datasets:
+        raise ValueError("data.datasets must list at least one dataset name.")
+
+    pose_scale_factors = list(validation.get("pose_scale_factors", [2.0]))
+    dual_cfg = bool(model.get("use_dual_cfg", False))
+    sat_cfg_value = float(model.get("cfg_scale_sat", model.get("cfg_scale", 2.0)))
+    img_cfg_value = float(model.get("cfg_scale_image", model.get("cfg_scale", 2.0)))
+
+    return EvaluationConfig(
+        checkpoint_path=str(checkpoint_path),
+        config_path=args.config,
+        output_path=output_path,
+        datasets=datasets,
+        datasets_config_path=str(data.get("ds_config_path", "eval")),
+        num_input_frames=int(data.get("num_input_frames", data.get("max_input_views", 1))),
+        num_total_frames=int(data.get("num_total_frames", data.get("max_views", 8))),
+        batch_size=int(data.get("batch_size", 1)),
+        resolution=resolution,
+        gpus=int(_first_not_none(args.gpus, infer.get("gpus"), 1)),
+        limit_val_batches=float(
+            _first_not_none(args.limit_val_batches, infer.get("limit_val_batches"), 1.0)
+        ),
+        ds_mode=str(infer.get("ds_mode", "val")),
+        validation_debug_dir=_first_not_none(
+            args.validation_debug_dir, infer.get("validation_debug_dir")
+        ),
+        pose_scale_factors=pose_scale_factors,
+        denoising_steps=int(validation.get("denoising_steps", 50)),
+        dual_cfg=dual_cfg,
+        sat_cfg_value=sat_cfg_value,
+        img_cfg_value=img_cfg_value,
+        use_ema=bool(infer.get("use_ema", False)),
+        ema_device=str(infer.get("ema_device", "cpu")),
+        ema_decay=float(infer.get("ema_decay", 0.999)),
+        ema_trainable_only=bool(infer.get("ema_trainable_only", False)),
+        reference_translation_noise_m=model.get("reference_translation_noise_m"),
+        reference_rotation_noise_deg=model.get("reference_rotation_noise_deg"),
+        rotate_satellite=bool(
+            args.rotate_satellite or infer.get("rotate_satellite", False)
+        ),
+        random_satellite=bool(
+            args.random_satellite or infer.get("random_satellite", False)
+        ),
+        flip_satellite=bool(args.flip_satellite or infer.get("flip_satellite", False)),
+        zero_satellite=bool(args.zero_satellite or infer.get("zero_satellite", False)),
+    )
 
 
 def main():
-    """Main entry point to run a single evaluation from the command line."""
-
     eval_config = get_evaluation_config()
-    # 2. Call the evaluation function
-    metrics = run_evaluation(eval_config)
+    run_evaluation(eval_config)
 
 
 if __name__ == "__main__":

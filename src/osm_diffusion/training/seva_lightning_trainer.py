@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms.functional as vision_F
+from omegaconf import OmegaConf
 
 # from bitsandbytes.optim import AdamW8bit
 from diffusers.optimization import get_scheduler
@@ -18,9 +19,6 @@ import osm_diffusion.training.viz as viz_utils
 from osm_diffusion.semeval import DINOv1SimilarityMeasure, SegAnySimilarityMeasure
 from osm_diffusion.seva import utils as seva_utils
 from osm_diffusion.seva.model import SevaEncoder
-from osm_diffusion.seva.satellite_model import (
-    SevaSatRayAttnFusedQuerySeparateBlockControlNet,
-)
 from osm_diffusion.training import utils
 from osm_diffusion.training.lora_utils import (
     extract_lora_state_dict,
@@ -40,16 +38,21 @@ logger = logging.getLogger(__name__)
 
 def get_lightning_module(config):
     logger.info(f"Creating SEVA lightning module...")
+    # Inference YAMLs omit training/optimizer; keep an empty stub so .get() works.
+    if config.get("training") is None:
+        config.training = OmegaConf.create({})
     pipeline = create_pipeline(
         model_config=config.model,
         paths_config=config.paths,
     )
     module = SevaLightningModule(pipeline, config)
-    if config.training.train_only_ldm_sat_ca:
+    if config.training.get("train_only_ldm_sat_ca", False):
         module.train_only_ldm_sat_ca()
         logger.info(f"Training only the LDM SAT CA...")
-    else:
+    elif config.training:
         logger.info(f"Training the full LDM according to config...")
+    else:
+        logger.info(f"Inference-only config (no training section).")
     return module
 
 
@@ -158,22 +161,6 @@ class SevaLightningModule(pl.LightningModule):
             self.ldm_encoder.requires_grad_(False)
             self.ldm_encoder.to(self.device)
 
-    def _should_apply_lora_to_control_copy(self, module_name: str) -> bool:
-        # Only apply LoRA to the trainable copied encoder path (input/middle blocks),
-        # not to newly introduced satellite/height branches.
-        in_control_copy = module_name.startswith("input_blocks.") or module_name.startswith(
-            "middle_block."
-        )
-        if not in_control_copy:
-            return False
-        if ".satellite_blocks." in module_name or ".height_cond_blocks." in module_name:
-            return False
-        if self._lora_target_modules and not any(
-            module_name.endswith(target_name) for target_name in self._lora_target_modules
-        ):
-            return False
-        return True
-
     def _should_apply_lora_for_seva(self, module_name: str) -> bool:
         """For base SEVA model: target linears matching target_modules anywhere in LDM."""
         if self._lora_target_modules and not any(
@@ -203,14 +190,9 @@ class SevaLightningModule(pl.LightningModule):
         self._lora_trainable = bool(lora_cfg.get("trainable", True))
         self._lora_target_modules = [str(x) for x in lora_cfg.get("target_modules", [])]
 
-        if isinstance(self.pipeline.ldm, SevaSatRayAttnFusedQuerySeparateBlockControlNet):
-            should_wrap = self._should_apply_lora_to_control_copy
-        else:
-            should_wrap = self._should_apply_lora_for_seva
-
         replaced = inject_lora_into_linears(
             self.pipeline.ldm,
-            should_wrap=should_wrap,
+            should_wrap=self._should_apply_lora_for_seva,
             rank=rank,
             alpha=alpha,
             dropout=dropout,
@@ -547,22 +529,13 @@ class SevaLightningModule(pl.LightningModule):
             -1, *scaled_conditioned_input.shape[2:]
         )
 
-        if isinstance(self.ldm_encoder, SevaSatRayAttnFusedQuerySeparateBlockControlNet):
-            intermeds = self.ldm_encoder.base_encoder_forward(
-                scaled_conditioned_input,
-                t=timesteps,
-                y=conditioning["cross_attn_cond"],
-                dense_y=conditioning["plucker_coords"],
-                num_frames=num_frames,
-            )
-        else:
-            _, intermeds = self.ldm_encoder(
-                scaled_conditioned_input,
-                t=timesteps,
-                y=conditioning["cross_attn_cond"],
-                dense_y=conditioning["plucker_coords"],
-                num_frames=num_frames,
-            )
+        _, intermeds = self.ldm_encoder(
+            scaled_conditioned_input,
+            t=timesteps,
+            y=conditioning["cross_attn_cond"],
+            dense_y=conditioning["plucker_coords"],
+            num_frames=num_frames,
+        )
         return intermeds
 
     def training_step(self, batch, batch_idx):
@@ -721,10 +694,10 @@ class SevaLightningModule(pl.LightningModule):
 
         if self.cfg.training.get("use_distillation_loss", False):
             assert intermeds is not None, "Intermeds are not available"
-            assert "satellite_features" in batch, "Satellite images are not available"
+            assert "satellite_images" in batch, "Satellite images are not available"
             model_input_with_support_views = noisy_latents.clone()
             valid_satellite_mask = (
-                torch.abs(batch["satellite_features"].reshape(B, -1)) > 0.01
+                torch.abs(batch["satellite_images"].reshape(B, -1)) > 0.01
             ).any(dim=1)
             # we drop image unconditional here, because its good to have this loss in image_uncond.
             support_mask = (~uncond_input_mask[:, None]) & (

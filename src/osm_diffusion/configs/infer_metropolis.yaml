@@ -1,0 +1,59 @@
+# Metropolis inference: dual CFG (sat=3, img=2). Satellite images are encoded with DINOv3.
+# Paths come from environment variables (see README).
+#
+#   python -m osm_diffusion.training.eval --config src/osm_diffusion/configs/infer_metropolis.yaml
+
+inference:
+  checkpoint_path: ${oc.env:GC_CHECKPOINT}
+  output_dir: ${oc.env:GC_OUTPUT_DIR,outputs/metropolis}
+  validation_debug_dir: metropolis_576_dual_cfg_sat3_img2
+
+paths:
+  pretrained_weights_path: ${oc.env:GC_PRETRAINED_WEIGHTS}
+  vae_ckpt_path: ${oc.env:GC_VAE_PATH}
+  clip_hf_hub_path: ${oc.env:GC_CLIP_HF_HUB}
+
+data:
+  datasets:
+    - metropolis
+  ds_config_path: eval
+  resolution: [576, 576]
+  num_input_frames: 7
+  num_total_frames: 21
+  batch_size: 1
+  val_num_workers: 8
+
+model:
+  name: satellite_ray_guided_ca
+  img_h: 576
+  img_w: 576
+  per_view_satellite_cond: true
+  sample_points_max_depth: 250.0
+  num_sample_points: 20
+  sat_encoder_name: dinov3_vitl16
+  sat_cond_dim: 1024
+  ray_pos_enc_freqs: 20
+  embedding_dim: 1024
+  street_raymap_dim: 120
+  use_mlp_for_merging_query: true
+  spherical_sampling: true
+  residual_sat_block: false
+  use_sat_output_norm: true
+  use_sat_output_gate: true
+  use_mlp_output_gate: true
+  use_dual_cfg: true
+  cfg_scale_image: 2.0
+  cfg_scale_sat: 3.0
+  use_reference_rotation: true
+  reference_translation_noise_m: 10.0
+  reference_rotation_noise_deg: 10.0
+
+validation:
+  denoising_steps: 50
+  pose_scale_factors: [2.0]
+  save_validation_results: true
+  save_validation_camera_specs: true
+  semeval: true
+
+lightning:
+  mixed_precision: bf16-mixed

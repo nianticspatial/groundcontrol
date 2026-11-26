@@ -14,11 +14,13 @@ from osm_diffusion.seva.modules.layers import (
 )
 from osm_diffusion.seva.modules.transformer import (
     MultiviewTransformer,
-    SatelliteMultiviewTransformer,
+    SatelliteMultiviewTransformerWithBlocks,
 )
 
-UNetInputBlock = ResBlock | MultiviewTransformer | SatelliteMultiviewTransformer | Downsample
-UNetOutputBlock = ResBlock | MultiviewTransformer | SatelliteMultiviewTransformer | Upsample
+UNetInputBlock = (
+    ResBlock | MultiviewTransformer | SatelliteMultiviewTransformerWithBlocks | Downsample
+)
+UNetOutputBlock = ResBlock | MultiviewTransformer | Upsample
 
 
 @dataclass

@@ -8,9 +8,6 @@ from torch import nn
 
 from osm_diffusion.seva.modules.transformer import (
     MultiviewTransformer,
-    SatelliteMultiviewTransformer,
-    SatelliteMultiviewTransformerFusedQueryRayAttn,
-    SatelliteMultiviewTransformerRayAttn,
     SatelliteMultiviewTransformerWithBlocks,
 )
 
@@ -113,21 +110,6 @@ class TimestepEmbedSequential(nn.Sequential):
                     input_mask=input_mask,
                     cond_sample_mask=cond_sample_mask,
                 )
-            elif isinstance(layer, SatelliteMultiviewTransformer):
-                assert num_frames is not None
-                assert sat_cond is not None
-                if isinstance(layer, SatelliteMultiviewTransformerRayAttn):
-                    res = layer.name.split("ds")[-1]
-                    sat_cond_res = sat_cond[res]
-                    x = layer(
-                        x, context, num_frames, sat_cond_res, debug_dict=debug_dict, x_embed=x_embed
-                    )
-                elif isinstance(layer, SatelliteMultiviewTransformerFusedQueryRayAttn):
-                    x = layer(
-                        x, context, num_frames, sat_cond, debug_dict=debug_dict, x_embed=x_embed
-                    )
-                else:
-                    x = layer(x, context, num_frames, sat_cond, debug_dict=debug_dict)
             elif isinstance(layer, MultiviewTransformer):
                 assert num_frames is not None
                 x = layer(x, context, num_frames)

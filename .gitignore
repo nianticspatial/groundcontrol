@@ -6,7 +6,10 @@ dist/
 build/
 .venv/
 .env
+outputs
 outputs/
 *.ckpt
 *.safetensors
 .ipynb_checkpoints/
+*.npz
+*.pt

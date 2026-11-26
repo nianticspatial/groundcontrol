@@ -1,19 +1,13 @@
 """
-Install dependency by running `pip install -r requirements_semeval.txt`
+Segment Anything similarity metric for semantic evaluation.
 
-Generate rel_image_paths.txt file by running `find . -type f -name "*.jpg" -print > rel_image_paths.txt`
-
-$> cd /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset
-$> find . -type f -name "*.jpg" -print > re_image_paths.txt
-$> cd ~/osm-diffusion
-$> CUDA_VISIBLE_DEVICES=0 python -m src.semeval.segany \
-    --dataset_path_gt /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset \
-    --dataset_path_pred /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset_pred/ \
-    --rel_image_paths_txt toy_dataset/rel_image_paths.txt
+Set GC_SAM_WEIGHTS to the SAM ViT-H checkpoint path, or pass
+sam_model_weights_path explicitly.
 """
 
 import argparse
 import json
+import os
 import pickle
 import time
 from pathlib import Path
@@ -40,9 +34,7 @@ class SegAnySimilarityMeasure(Metric):
 
     def __init__(
         self,
-        sam_model_weights_path: Path = Path(
-            "/mnt/nas/shared/projects/sem_eval/sam_vit_h_4b8939.pth"
-        ),
+        sam_model_weights_path: Path | str | None = None,
         sam_model_type: str = "default",
         reduction: Literal["pixelwise_mean", "mean", "sum", "none", None] = "mean",
         **kwargs: Any,
@@ -55,7 +47,12 @@ class SegAnySimilarityMeasure(Metric):
         self.add_state("target", default=[], dist_reduce_fx="cat")
         self.reduction = reduction
 
-        sam = sam_model_registry[sam_model_type](checkpoint=sam_model_weights_path)
+        weights_path = sam_model_weights_path or os.environ.get("GC_SAM_WEIGHTS")
+        if not weights_path:
+            raise ValueError(
+                "SAM weights path required: set GC_SAM_WEIGHTS or pass sam_model_weights_path."
+            )
+        sam = sam_model_registry[sam_model_type](checkpoint=str(weights_path))
         sam.cuda()
         sam.eval()
         self.predictor = SamPredictor(sam)
@@ -215,8 +212,8 @@ def main():
     parser.add_argument(
         "--sam_model_weights_path",
         type=Path,
-        default=Path("/mnt/nas/shared/projects/sem_eval/sam_vit_h_4b8939.pth"),
-        help="Path to the SAM model weights (.pth) file.",
+        default=None,
+        help="Path to the SAM model weights (.pth) file. Defaults to GC_SAM_WEIGHTS.",
     )
     parser.add_argument(
         "--sam_model_type",

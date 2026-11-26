@@ -1,4 +1,4 @@
-name: sat-seva
+name: groundcontrol
 channels:
   - pytorch
   - conda-forge

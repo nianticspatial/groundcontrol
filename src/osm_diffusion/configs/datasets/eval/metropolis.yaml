@@ -1,24 +1,23 @@
-name: "metropolis"
-data_dir: "/mnt/nas/shared/datasets/metropolis"
+name: metropolis
+data_dir: ${oc.env:METROPOLIS_DATA_DIR}
 resolution: 576
-sampling_interval: 1 # use every Nth frame
-start_offset_timestamps: 3 # number of frames to skip at the start
-use_temporal_subsampling: true # use multiple timestamps for each frame
-min_views: 21 # minimum number of views per batch item
+sampling_interval: 1
+start_offset_timestamps: 3
+use_temporal_subsampling: true
+min_views: 21
 num_subsample_cameras: 3
-cropping_method: "center"
+cropping_method: center
 temporal_window_size: 7
 num_max_images: 22
-satellite_dir: "/mnt/nas/shared/datasets/metropolis/sat_preprocessed"
-dino_satellite_feats_dir: "/mnt/nas/shared/datasets/metropolis/sat_preprocessed_dinov3_vitl16_feats"
+satellite_dir: ${oc.env:METROPOLIS_SATELLITE_DIR}
 use_satellite: true
 input_camera_names: ["CAM_FRONT"]
 target_camera_names: ["CAM_LEFT", "CAM_RIGHT"]
-temporal_window_start_offset: 0 # number of initial frames to skip
-temporal_window_sampling_interval: 2 # Add every 5th frame to the set of timestamps
+temporal_window_start_offset: 0
+temporal_window_sampling_interval: 2
 single_sample_per_scene: true
 satellite_configs:
-  - name: "metropolis_128m_4ppm"
+  - name: metropolis_128m_4ppm
     size: 128
     ppm: 4
     resolution: 512

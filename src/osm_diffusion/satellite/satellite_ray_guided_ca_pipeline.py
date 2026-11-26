@@ -20,7 +20,7 @@ def get_satellite_feature_dim(sat_encoder_name: str) -> int:
         raise ValueError(f"Unknown satellite encoder {sat_encoder_name}")
 
 
-class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
+class SatelliteRayGuidedCAPipeline(SatelliteSevaPipeline):
     def __init__(
         self,
         disable_sat_conditioning: bool = False,
@@ -31,7 +31,6 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         sample_points_max_depth: float = 100,
         num_sample_points: int = 16,
         sat_encoder_name: str = "dinov2_vits14",
-        use_preprocessed_dino_features: bool = False,
         sat_use_dpt_head: bool = False,
         sat_dpt_head_config: dict | None = None,
         ray_pos_enc_freqs: int = 10,
@@ -45,7 +44,6 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
     ):
         super().__init__(*args, **kwargs)
 
-        self.use_preprocessed_dino_features = use_preprocessed_dino_features
         # When True, in dual-CFG mode we not only zero satellite
         # features for the image-only / unconditioned paths but also
         # rely on cond_sample_mask so that satellite residuals are not
@@ -54,48 +52,20 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         self.use_sat_dpt_head = sat_use_dpt_head
         self.sat_dpt_head_config = (sat_dpt_head_config or {}).copy()
         self.train_sat_dpt_head = train_sat_dpt_head
-        if self.use_sat_dpt_head and self.use_preprocessed_dino_features:
-            raise ValueError("DPT sat encoder does not support preprocessed satellite features.")
         default_sat_dim = get_satellite_feature_dim(sat_encoder_name)
-        if self.use_preprocessed_dino_features:
-            # For preprocessed features (including PCA-projected ones), sat_cond_dim
-            # is the true channel dimension expected by the model and attention blocks.
-            self.sat_feature_dim = int(
-                getattr(
-                    self.ldm,
-                    "sat_cond_dim",
-                    self.sat_dpt_head_config.get("n_output_channels", default_sat_dim),
-                )
-            )
-        else:
-            self.sat_feature_dim = int(
-                self.sat_dpt_head_config.get("n_output_channels", default_sat_dim)
-            )
-        print(f"use_preprocessed_dino_features: {self.use_preprocessed_dino_features}")
+        self.sat_feature_dim = int(
+            self.sat_dpt_head_config.get("n_output_channels", default_sat_dim)
+        )
 
-        if self.use_preprocessed_dino_features:
-            assert (
-                train_sat_encoder == False
-            ), "Cannot train the DINO features if the dataloader provides preprocessed features"
-            self.sat_encoder = None
-            self.sat_transform = None
-        else:
-            print("Initializing satellite encoder...")
-            self.sat_encoder = sat_utils.get_sat_encoder(
-                sat_encoder_name,
-                use_dpt_head=self.use_sat_dpt_head,
-                dpt_head_config=self.sat_dpt_head_config,
-            )
-
-            self.sat_encoder.to(self.device)
-            if self.use_sat_dpt_head:
-                self.sat_encoder.set_backbone_trainable(train_sat_encoder)
-                self.sat_encoder.set_dpt_head_trainable(self.train_sat_dpt_head)
-            else:
-                if not train_sat_encoder:
-                    self.sat_encoder.eval()
-                self.sat_encoder.requires_grad_(train_sat_encoder)
-            self.sat_transform = sat_utils.get_sat_encoder_transform(sat_encoder_name)
+        if self.use_sat_dpt_head:
+            raise RuntimeError("This release does not include a DPT satellite head.")
+        print("Initializing satellite encoder...")
+        self.sat_encoder = sat_utils.get_sat_encoder(sat_encoder_name)
+        self.sat_encoder.to(self.device)
+        if not train_sat_encoder:
+            self.sat_encoder.eval()
+        self.sat_encoder.requires_grad_(train_sat_encoder)
+        self.sat_transform = sat_utils.get_sat_encoder_transform(sat_encoder_name)
 
         self.disable_sat_conditioning = disable_sat_conditioning
         self.train_sat_encoder = train_sat_encoder
@@ -184,10 +154,7 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         satellite_images = satellite_images.to(self.device)
         satellite_images = self.sat_transform(satellite_images)
         satellite_tokens = self.sat_encoder.forward_features(satellite_images)["x_norm_patchtokens"]
-
-        # This is hardcoded for now, but should be dynamic
         sat_emb_size = int(math.sqrt(satellite_tokens.shape[-2]))
-        # TODO: this does not actually work for M > 1
         if wrapped:
             satellite_tokens = satellite_tokens.reshape(
                 B, -1, sat_emb_size, sat_emb_size, satellite_tokens.shape[-1]
@@ -249,12 +216,6 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
 
         view_ref_R_cam = ref_rot[:, None].transpose(-1, -2) @ cam_poses[..., :3, :3]  # B, N, 3, 3
         z_rot_clock = torch.atan2(view_ref_R_cam[:, :, 0, 2], view_ref_R_cam[:, :, 2, 2])
-        # Compute the rotation from the pp to the image center
-        # x_angle = torch.atan2(
-        #     (batch["intrinsics"][:, :, 0, 2] - img_center), batch["intrinsics"][:, :, 0, 0]
-        # ).to(ray_points.device)
-        # x_angle = 0
-
         img_center_rot_clock = z_rot_clock
         c, s = torch.cos(img_center_rot_clock), torch.sin(img_center_rot_clock)
         rot_mat = torch.stack(
@@ -302,37 +263,6 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         ray_features = rearrange(ray_features, "bn c w z -> bn w z c")
         return ray_features, ray_points
 
-    # def _get_ray_features(self, batch, satellite_features: torch.Tensor, latent_ds_factor=8):
-    #     # Get the features for the ray points.
-    #     ray_points = self._get_transformed_ray_points(batch, latent_ds_factor=latent_ds_factor)
-
-    #     B, N = batch["images"].shape[:2]
-    #     _, num_sat = satellite_features.shape[:2]
-    #     satellite_features = rearrange(satellite_features, "b s h w c -> (b s) h w c")
-    #     satellite_features = satellite_features[:, None].expand(-1, N, -1, -1, -1)
-    #     satellite_features = rearrange(satellite_features, "bs n h w c -> (bs n) c h w")
-
-    #     if num_sat > 1:
-    #         ray_points = ray_points[:, None].expand(-1, num_sat, -1, -1, -1, -1)
-    #         ray_points = rearrange(ray_points, "b s n w z d -> (b s) n w z d")
-
-    #     # Ray points are in the range [-1, 1]
-    #     ray_points = rearrange(ray_points, "bs n w z d -> (bs n) w z d")
-    #     sat_res = batch["satellite_images"].shape[-1]
-    #     ray_points = 2 * ray_points / sat_res - 1
-    #     ray_features = F.grid_sample(satellite_features, ray_points, align_corners=True)
-    #     ray_features = rearrange(ray_features, "bsn c w z -> bsn w z c")
-    #     if num_sat > 1:
-    #         ray_features = rearrange(
-    #             ray_features, "(b s n) w z c -> (b n) s w z c", b=B, n=N, s=num_sat
-    #         )
-    #         ray_points = rearrange(
-    #             ray_points, "(b s n) w z d -> (b n) s w z d", b=B, s=num_sat, n=N
-    #         )[
-    #             :, 0
-    #         ]  # (b n) w z d
-    #     return ray_features, ray_points
-
     def update_inputs_ldm_kwargs_for_timestep(
         self,
         scaled_conditioned_input,
@@ -355,14 +285,10 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         debug: bool = False,
         num_noise_samples: int = 1,
     ):
-        if self.use_preprocessed_dino_features:
-            batch["satellite_features"] = batch["satellite_features"].to(self.device)
-            sat_cond = batch["satellite_features"]
-        else:
-            batch["satellite_images"] = batch["satellite_images"].to(self.device)
-            scope = nullcontext() if self.train_sat_encoder else torch.no_grad()
-            with scope:
-                sat_cond = self.encode_satellite_images(batch["satellite_images"])
+        batch["satellite_images"] = batch["satellite_images"].to(self.device)
+        scope = nullcontext() if self.train_sat_encoder else torch.no_grad()
+        with scope:
+            sat_cond = self.encode_satellite_images(batch["satellite_images"])
 
         B, N = batch["images"].shape[:2]
 
@@ -495,38 +421,6 @@ class SatelliteRayFusedQueryCAPipeline(SatelliteSevaPipeline):
         if self.strict_dual_cfg_sat_mask and cond_sample_mask is not None:
             ldm_kwargs["cond_sample_mask"] = cond_sample_mask
         return ldm_kwargs
-
-    # def prepare_inputs_cfg(
-    #     self, model_input, noisy_latents, concat_condn, plucker_coords, cross_attn_condn
-    # ):
-    #     # semantic conditioning, unconditioned is jus zero.
-    #     cross_attn_condn_input = torch.cat(
-    #         [cross_attn_condn, cross_attn_condn, torch.zeros_like(cross_attn_condn)], dim=0
-    #     )
-
-    #     # "concatenated condition": input_mask + camera poses
-    #     # we treat the input mask for unconditioned sample as all zeros.
-    #     concat_condn_input = torch.cat(
-    #         [
-    #             concat_condn,
-    #             torch.cat(
-    #                 [torch.zeros_like(concat_condn[:, :, :1]), concat_condn[:, :, 1:]],
-    #                 dim=2,
-    #             ),
-    #         ],
-    #         dim=0,
-    #     )
-
-    #     dense_vector_condn = torch.cat([plucker_coords] * 2, dim=0)
-
-    #     # model input may contain pure latents for known images, which is the replace condition
-    #     model_input = torch.cat([model_input, noisy_latents], dim=0)
-    #     return (
-    #         model_input,
-    #         cross_attn_condn_input,
-    #         concat_condn_input,
-    #         dense_vector_condn,
-    #     )
 
     def debug_images(self, batch, sat_attn_vals=None):
 

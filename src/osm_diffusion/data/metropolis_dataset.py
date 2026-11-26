@@ -62,8 +62,6 @@ class MetropolisDataset(GenericMVSDataset):
 
         return resized_image, updated_intrinsics
 
-    # --- The _build_samples, _get_camera_names, and other methods remain the same ---
-
     def _build_samples(self):
         """
         Builds the list of samples for the Metropolis dataset. It caches scene-to-timestamp
@@ -252,17 +250,6 @@ class MetropolisDataset(GenericMVSDataset):
         gps_coords = np.stack([lats, lons], axis=-1)
         return torch.from_numpy(gps_coords).float()
 
-    def _get_osm_views(
-        self,
-        log_id: str,
-        timestamp: Any,
-        reference_rotation: Optional[torch.Tensor],
-        views_w_T_cam: Optional[List[torch.Tensor]],
-        intrinsics: Optional[List[torch.Tensor]],
-    ) -> Optional[List[torch.Tensor]]:
-        """(Abstract) Loads all configured OSM views for a given sample."""
-        return None
-
     def _get_satellite_views(
         self,
         log_id: str,  # This is the scene_token
@@ -311,48 +298,3 @@ class MetropolisDataset(GenericMVSDataset):
                     satellite_images.append(torch.zeros(3, resolution, resolution))
 
         return satellite_images
-
-    def _get_satellite_view_features(
-        self,
-        log_id: str,
-        timestamp: Any,
-    ) -> Optional[List[torch.Tensor]]:
-        dino_features_list = []
-        if self.dino_satellite_feats_dir is None:
-            return dino_features_list
-
-        for sat_config in self.satellite_configs:
-            feat_path = (
-                Path(self.dino_satellite_feats_dir)
-                / self.mode
-                / log_id
-                / sat_config["name"]
-                / f"{timestamp}.npz"
-            )
-            if feat_path.exists():
-                dino_features = torch.from_numpy(np.load(feat_path)["feats"])
-                dino_features = dino_features.reshape(32, 32, 1024)
-                dino_features_list.append(dino_features)
-            else:
-                feat_path = (
-                    Path(self.dino_satellite_feats_dir) / self.mode / log_id / f"{timestamp}.npz"
-                )
-                if feat_path.exists():
-                    dino_features = torch.from_numpy(np.load(feat_path)["feats"])
-                    dino_features = dino_features.reshape(32, 32, 1024)
-                    dino_features_list.append(dino_features)
-                else:
-                    sat_img_path = (
-                        self.satellite_dir
-                        / self.mode
-                        / log_id
-                        / sat_config["name"]
-                        / f"{timestamp}.png"
-                    )
-                    if sat_img_path.exists():
-                        raise FileNotFoundError(
-                            f"satellite image exists but DINO features do not for {sat_img_path}"
-                        )
-                    print(f"DINO features not found for {sat_img_path}, using zeros")
-                    dino_features_list.append(torch.zeros(32, 32, 1024, dtype=torch.float32))
-        return dino_features_list

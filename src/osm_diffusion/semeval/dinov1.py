@@ -1,14 +1,8 @@
 """
-Generate rel_image_paths.txt file by running `find . -type f -name "*.jpg" -print > rel_image_paths.txt`
+DINOv1 similarity metric for semantic evaluation.
 
-$> cd /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset
-$> find . -type f -name "*.jpg" -print > re_image_paths.txt
-$> cd ~/osm-diffusion
-$> CUDA_VISIBLE_DEVICES=0 python -m src.semeval.dinov1 \
-    --dataset_path_gt /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset \
-    --dataset_path_pred /mnt/nas/personal/daniyar/projects/osm-diffusion/toy_dataset_pred/ \
-    --rel_image_paths_txt toy_dataset/rel_image_paths.txt \
-    --batch_size 1
+Set GC_DINO_WEIGHTS to the DINO ViT-B/16 checkpoint path, or pass
+dino_model_weights_path explicitly.
 """
 
 import argparse
@@ -62,9 +56,7 @@ class DINOv1SimilarityMeasure(Metric):
 
     def __init__(
         self,
-        dino_model_weights_path: Path = Path(
-            "/mnt/nas/shared/projects/sem_eval/dino_vitbase16_pretrain.pth"
-        ),
+        dino_model_weights_path: Path | str | None = None,
         dino_model_type: str = "vit_base",
         dino_patch_size: int = 16,
         reduction: Literal["pixelwise_mean", "mean", "sum", "none", None] = "mean",
@@ -75,11 +67,18 @@ class DINOv1SimilarityMeasure(Metric):
         self.add_state("target", default=[], dist_reduce_fx="cat")
         self.reduction = reduction
 
+        weights_path = dino_model_weights_path or os.environ.get("GC_DINO_WEIGHTS")
+        if not weights_path:
+            raise ValueError(
+                "DINOv1 weights path required: set GC_DINO_WEIGHTS or pass dino_model_weights_path."
+            )
+        weights_path = Path(weights_path)
+
         assert "vit" in dino_model_type
         self.model = vits.__dict__[dino_model_type](patch_size=dino_patch_size, num_classes=0)
         self.model.cuda()
         load_pretrained_weights(
-            self.model, dino_model_weights_path, None, dino_model_type, dino_patch_size
+            self.model, weights_path, None, dino_model_type, dino_patch_size
         )
         self.model.eval()
 
@@ -368,8 +367,8 @@ def main():
     parser.add_argument(
         "--dino_model_weights_path",
         type=Path,
-        default=Path("/mnt/nas/shared/projects/sem_eval/dino_vitbase16_pretrain.pth"),
-        help="Path to the DINO model weights (.pth) file.",
+        default=None,
+        help="Path to the DINO model weights (.pth) file. Defaults to GC_DINO_WEIGHTS.",
     )
     parser.add_argument(
         "--dino_model_type",

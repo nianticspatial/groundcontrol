@@ -1,16 +1,17 @@
 import torch
 
 import osm_diffusion.seva.utils as seva_utils
-from osm_diffusion.satellite.satellite_ray_fused_query_ca_pipeline import (
-    SatelliteRayFusedQueryCAPipeline,
+from osm_diffusion.satellite.satellite_ray_guided_ca_pipeline import (
+    SatelliteRayGuidedCAPipeline,
 )
 from osm_diffusion.seva.model import SevaParams
 from osm_diffusion.seva.modules.autoencoder import AutoEncoder
 from osm_diffusion.seva.modules.conditioner import CLIPConditioner
-from osm_diffusion.seva.satellite_model import SevaSatRayAttnFusedQuerySeparateBlock
+from osm_diffusion.seva.satellite_model import SatelliteRayGuidedCA
 from osm_diffusion.training.ddpm_scheduler import DDPMTrainingScheduler
 
-MODEL_NAME = "satellite_ray_fused_query_ca_sep_blocks"
+# Public release name for the satellite ray-guided cross-attention model.
+MODEL_NAME = "satellite_ray_guided_ca"
 
 
 def get_satellite_pipeline_kwargs(model_config):
@@ -32,7 +33,7 @@ def create_pipeline(
     dtype=None,
     return_attn=False,
 ):
-    """Build the released satellite-conditioned SEVA pipeline."""
+    """Build the released satellite ray-guided CA pipeline."""
     if model_config.name != MODEL_NAME:
         raise ValueError(
             f"This release only supports model '{MODEL_NAME}', got '{model_config.name}'."
@@ -63,8 +64,8 @@ def create_pipeline(
         "skip_clip_attn": skip_clip_attn,
         "sat_cond_dim": sat_cond_dim,
     }
-    model_cls = SevaSatRayAttnFusedQuerySeparateBlock
-    pipeline_cls = SatelliteRayFusedQueryCAPipeline
+    model_cls = SatelliteRayGuidedCA
+    pipeline_cls = SatelliteRayGuidedCAPipeline
     sat_kwargs.update(
         {
             "sample_points_min_depth": model_config.get("sample_points_min_depth", 2.0),
@@ -78,9 +79,6 @@ def create_pipeline(
             "add_positional_encoding": not model_config.get("use_mlp_sat_pos", False),
             "position_encoding_scale": model_config.get("position_encoding_scale", 1.0),
             "spherical_sampling": model_config.get("spherical_sampling", False),
-            "use_preprocessed_dino_features": model_config.get(
-                "use_preprocessed_dino_features", False
-            ),
             "reference_translation_noise_m": model_config.get("reference_translation_noise_m", 0.0),
             "reference_rotation_noise_deg": model_config.get("reference_rotation_noise_deg", 0.0),
         }
@@ -165,10 +163,10 @@ def create_pipeline(
         semantic_encoder=semantic_encoder,
         scheduler=scheduler,
         device=device,
-        cfg_scale=model_config.cfg_scale,
+        cfg_scale=model_config.get("cfg_scale", 4.0),
         dtype=dtype,
-        use_reference_rotation=model_config.use_reference_rotation,
-        using_older_ckpt=model_config.using_older_ckpt,
+        use_reference_rotation=model_config.get("use_reference_rotation", True),
+        using_older_ckpt=model_config.get("using_older_ckpt", False),
         return_attn=return_attn,
         img_h=model_config.get("img_h", 256),
         img_w=model_config.get("img_w", 256),

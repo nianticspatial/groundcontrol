@@ -69,7 +69,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
         self.temporal_window_size = config.get("temporal_window_size", 5)
         self.temporal_window_input_mask = config.get("temporal_window_input_mask", None)
         self.num_max_images = config.get("num_max_images", 15)
-        self.satellite_features_only_mode = config.get("satellite_features_only_mode", False)
         if self.use_temporal_subsampling and self.temporal_window_size % 2 == 0:
             raise ValueError("temporal_window_size must be an odd number.")
         if self.temporal_window_input_mask is not None:
@@ -87,9 +86,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
 
         # --- Satellite Map Configurations ---
         self.use_satellite = config.get("use_satellite", False)
-        self.sat_features_pca_basis = None
-        self.sat_features_pca_mean = None
-        self.sat_features_pca_dim = None
         if self.use_satellite:
             self.satellite_dir = Path(config.get("satellite_dir"))
             self.satellite_configs = config.get("satellite_configs", [])
@@ -99,94 +95,8 @@ class GenericMVSDataset(Dataset, abc.ABC):
                 raise ValueError(
                     "'satellite_configs' must be provided when 'use_satellite' is True."
                 )
-            self.dino_satellite_feats_dir = config.get("dino_satellite_feats_dir", None)
-            if (
-                self.dino_satellite_feats_dir is not None
-                and Path(self.dino_satellite_feats_dir).exists()
-            ):
-                print(
-                    f"DINO satellite features directory found at: {self.dino_satellite_feats_dir}"
-                )
-            elif self.dino_satellite_feats_dir is not None:
-                raise FileNotFoundError(
-                    f"DINO satellite features directory not found at: {self.dino_satellite_feats_dir}"
-                )
-
-            sat_features_pca_basis_path = config.get("satellite_features_pca_basis_path", None)
-            sat_features_pca_num_components = config.get(
-                "satellite_features_pca_num_components", None
-            )
-            if sat_features_pca_basis_path is not None:
-                basis_path = Path(sat_features_pca_basis_path)
-                if not basis_path.exists():
-                    raise FileNotFoundError(
-                        f"Satellite features PCA basis file not found at: {basis_path}"
-                    )
-
-                with np.load(basis_path, allow_pickle=True) as pca_data:
-                    if "basis" not in pca_data or "mean" not in pca_data:
-                        raise ValueError(
-                            f"PCA basis file must contain 'basis' and 'mean' keys: {basis_path}"
-                        )
-                    basis = np.asarray(pca_data["basis"], dtype=np.float32)
-                    mean = np.asarray(pca_data["mean"], dtype=np.float32)
-
-                if basis.ndim != 2:
-                    raise ValueError(
-                        f"Expected PCA basis with shape [feature_dim, num_bases], got {basis.shape}"
-                    )
-                if mean.ndim != 1:
-                    raise ValueError(
-                        f"Expected PCA mean with shape [feature_dim], got {mean.shape}"
-                    )
-                if basis.shape[0] != mean.shape[0]:
-                    raise ValueError(
-                        f"PCA basis/mean dimension mismatch: basis={basis.shape}, mean={mean.shape}"
-                    )
-
-                max_available_bases = basis.shape[1]
-                if sat_features_pca_num_components is None:
-                    proj_dim = max_available_bases
-                else:
-                    proj_dim = int(sat_features_pca_num_components)
-                    if proj_dim < 1:
-                        raise ValueError(
-                            f"satellite_features_pca_num_components must be >= 1, got {proj_dim}"
-                        )
-                    if proj_dim > max_available_bases:
-                        raise ValueError(
-                            f"Requested {proj_dim} PCA components, but basis has only {max_available_bases}"
-                        )
-
-                self.sat_features_pca_basis = torch.from_numpy(basis[:, :proj_dim])
-                self.sat_features_pca_mean = torch.from_numpy(mean)
-                self.sat_features_pca_dim = proj_dim
-                print(
-                    "Satellite feature PCA projection enabled: "
-                    f"path={basis_path}, input_dim={basis.shape[0]}, output_dim={proj_dim}"
-                )
-            if self.satellite_features_only_mode and self.dino_satellite_feats_dir is None:
-                raise ValueError(
-                    "satellite_features_only_mode requires dino_satellite_feats_dir to be set."
-                )
 
         self.sample_cameras_per_item = config.get("sample_cameras_per_item", 0)
-
-        self.use_osm = config.get("use_osm", False)
-        if self.use_osm:
-            self.osm_dir = Path(config.osm_dir)
-            self.osm_configs = config.osm_configs
-        else:
-            self.osm_dir = None
-            self.osm_configs = []
-
-        self.use_height_maps = config.get("use_height_maps", False)
-        if self.use_height_maps:
-            self.height_maps_dir = Path(config.height_maps_dir)
-            self.height_map_configs = config.height_map_configs
-        else:
-            self.height_maps_dir = None
-            self.height_map_configs = []
 
         # --- Input/Target Camera Configuration ---
         self.input_camera_names = config.get("input_camera_names", None)
@@ -232,43 +142,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
     ) -> Optional[List[torch.Tensor]]:
         """(Abstract) Loads all configured satellite views for a given sample."""
         raise NotImplementedError
-
-    @abc.abstractmethod
-    def _get_satellite_view_features(
-        self,
-        log_id: str,
-        timestamp: Any,
-    ) -> Optional[List[torch.Tensor]]:
-        """(Abstract) Loads all preprocessed satellite view features for a given sample."""
-        raise NotImplementedError
-
-    def _get_osm_views(
-        self,
-        log_id: str,
-        timestamp: Any,
-        reference_rotation: Optional[torch.Tensor],
-        views_w_T_cam: Optional[List[torch.Tensor]],
-        intrinsics: Optional[List[torch.Tensor]],
-    ) -> Optional[List[torch.Tensor]]:
-        """(Abstract) Loads all configured OSM views for a given sample."""
-        if self.use_osm:
-            raise NotImplementedError
-        else:
-            return None
-
-    def _get_height_maps(
-        self,
-        log_id: str,
-        timestamp: Any,
-        reference_rotation: Optional[torch.Tensor],
-        views_w_T_cam: Optional[List[torch.Tensor]],
-        intrinsics: Optional[List[torch.Tensor]],
-    ) -> Optional[List[torch.Tensor]]:
-        """(Abstract) Loads all configured OSM views for a given sample."""
-        if self.use_height_maps:
-            raise NotImplementedError
-        else:
-            return None
 
     @abc.abstractmethod
     def _get_reference_rotation(
@@ -415,35 +288,10 @@ class GenericMVSDataset(Dataset, abc.ABC):
     def __getitem__(self, index: int) -> Dict[str, Union[torch.Tensor, Tuple]]:
         if self.single_sample_overfit:
             index = 0
-        if self.satellite_features_only_mode:
-            return self._get_satellite_features_only_item(index)
         if self.use_temporal_subsampling:
             return self._get_temporal_item(index)
         else:
             return self._get_single_timestamp_item(index)
-
-    def _get_satellite_features_only_item(
-        self, index: int
-    ) -> Dict[str, Union[torch.Tensor, Tuple]]:
-        sample_entry = self.samples[index]
-        if len(sample_entry) < 2:
-            raise ValueError(
-                f"Expected sample tuple with at least (log_id, timestamp), got: {sample_entry}"
-            )
-        log_id = sample_entry[0]
-        center_timestamp = sample_entry[1]
-
-        satellite_features = self._get_satellite_view_features(log_id, center_timestamp)
-        satellite_features = self._project_satellite_features(satellite_features)
-        if satellite_features is None or len(satellite_features) == 0:
-            raise ValueError(
-                f"No satellite features returned for sample {(log_id, center_timestamp)}."
-            )
-
-        return {
-            "satellite_features": torch.stack(satellite_features),
-            "sample_id": (log_id, center_timestamp, 0),
-        }
 
     def _get_input_target_mask(self, num_images) -> tuple[torch.Tensor, torch.Tensor] | None:
         """
@@ -507,30 +355,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
         """(Abstract) Returns a dictionary of auxiliary, non-tensor data for a sample."""
         return {}
 
-    def _project_satellite_features(
-        self, satellite_features: Optional[List[torch.Tensor]]
-    ) -> Optional[List[torch.Tensor]]:
-        if satellite_features is None:
-            return None
-        if self.sat_features_pca_basis is None:
-            return satellite_features
-
-        projected_features = []
-        in_dim = int(self.sat_features_pca_mean.shape[0])
-        out_dim = int(self.sat_features_pca_basis.shape[1])
-        mean = self.sat_features_pca_mean
-        basis = self.sat_features_pca_basis
-
-        for features in satellite_features:
-            if features.shape[-1] != in_dim:
-                raise ValueError(
-                    f"Satellite feature dim mismatch. Expected {in_dim}, got {features.shape[-1]}"
-                )
-            reshaped = features.to(torch.float32).reshape(-1, in_dim)
-            projected = (reshaped - mean) @ basis
-            projected_features.append(projected.reshape(*features.shape[:-1], out_dim))
-        return projected_features
-
     def _get_single_timestamp_item(self, index: int) -> Dict[str, Union[torch.Tensor, Tuple]]:
         log_id, center_timestamp = self.samples[index]
         data_lists = {"images": [], "poses": [], "intrinsics": [], "timestamps": []}
@@ -577,14 +401,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
         )
         # --- Fetch per-sample satellite views ---
         if self.use_satellite:
-            if self.dino_satellite_feats_dir is not None:
-                data_lists["satellite_features"] = self._get_satellite_view_features(
-                    log_id,
-                    center_timestamp,
-                )
-                data_lists["satellite_features"] = self._project_satellite_features(
-                    data_lists["satellite_features"]
-                )
             data_lists["satellite_images"] = self._get_satellite_views(
                 log_id,
                 center_timestamp,
@@ -592,23 +408,6 @@ class GenericMVSDataset(Dataset, abc.ABC):
                 data_lists["poses"],
                 data_lists["intrinsics"],
             )
-        if self.use_osm:
-            data_lists["osm_images"] = self._get_osm_views(
-                log_id,
-                center_timestamp,
-                reference_rotation,
-                data_lists["poses"],
-                data_lists["intrinsics"],
-            )
-        if self.use_height_maps:
-            data_lists["height_maps"] = self._get_height_maps(
-                log_id,
-                center_timestamp,
-                reference_rotation,
-                data_lists["poses"],
-                data_lists["intrinsics"],
-            )
-
         sample_id = (log_id, center_timestamp, 0)
         return self._package_data(data_lists, sample_id, reference_rotation, reference_translation)
 
@@ -733,32 +532,7 @@ class GenericMVSDataset(Dataset, abc.ABC):
 
         # --- Fetch per-sample satellite views ---
         if self.use_satellite:
-            if self.dino_satellite_feats_dir is not None:
-                data_lists["satellite_features"] = self._get_satellite_view_features(
-                    log_id,
-                    center_timestamp,
-                )
-                data_lists["satellite_features"] = self._project_satellite_features(
-                    data_lists["satellite_features"]
-                )
             data_lists["satellite_images"] = self._get_satellite_views(
-                log_id,
-                center_timestamp,
-                reference_rotation,
-                data_lists["poses"],
-                data_lists["intrinsics"],
-            )
-
-        if self.use_osm:
-            data_lists["osm_images"] = self._get_osm_views(
-                log_id,
-                center_timestamp,
-                reference_rotation,
-                data_lists["poses"],
-                data_lists["intrinsics"],
-            )
-        if self.use_height_maps:
-            data_lists["height_maps"] = self._get_height_maps(
                 log_id,
                 center_timestamp,
                 reference_rotation,
