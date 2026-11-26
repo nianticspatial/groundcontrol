@@ -1,8 +1,7 @@
 """
 Segment Anything similarity metric for semantic evaluation.
 
-Set GC_SAM_WEIGHTS to the SAM ViT-H checkpoint path, or pass
-sam_model_weights_path explicitly.
+Pass sam_model_weights_path, or set sam_weights in paths.yaml / GC_SAM_WEIGHTS.
 """
 
 import argparse

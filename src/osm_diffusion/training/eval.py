@@ -23,6 +23,7 @@ from osm_diffusion.data.satellite_perturbations import (
     SatellitePerturbationDataset,
 )
 from osm_diffusion.training import seva_lightning_trainer
+from osm_diffusion.training.config_loader import load_inference_config
 from osm_diffusion.training.ema import EMAUnetAveraging
 
 
@@ -87,8 +88,7 @@ def run_evaluation(cfg: EvaluationConfig, ds_id=None) -> List[Mapping[str, float
     if cfg.checkpoint_path is None:
         print("No checkpoint path provided. Using the baseline SEVA model")
     print(f"--- [PID: {Path().owner()}] Running evaluation for: {cfg.checkpoint_path} ---")
-    config = OmegaConf.load(cfg.config_path)
-    OmegaConf.resolve(config)
+    config = load_inference_config(cfg.config_path)
 
     print("Applying evaluation settings from config...")
     config.data.datasets = cfg.datasets
@@ -306,8 +306,7 @@ def get_evaluation_config() -> EvaluationConfig:
     )
     args = parser.parse_args()
 
-    yaml_cfg = OmegaConf.load(args.config)
-    OmegaConf.resolve(yaml_cfg)
+    yaml_cfg = load_inference_config(args.config)
     infer = yaml_cfg.get("inference", OmegaConf.create({}))
     data = yaml_cfg.get("data", OmegaConf.create({}))
     model = yaml_cfg.get("model", OmegaConf.create({}))
@@ -316,7 +315,7 @@ def get_evaluation_config() -> EvaluationConfig:
     checkpoint_path = _first_not_none(args.checkpoint_path, infer.get("checkpoint_path"))
     if checkpoint_path is None:
         raise ValueError(
-            "checkpoint_path must be set in the inference config or passed via --checkpoint-path."
+            "checkpoint_path must be set in paths.yaml or passed via --checkpoint-path."
         )
 
     output_dir = Path(

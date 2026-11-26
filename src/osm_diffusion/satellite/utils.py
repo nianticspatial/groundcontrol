@@ -6,14 +6,16 @@ from torch import nn
 from torchvision import transforms
 
 
-def get_sat_encoder(sat_encoder_name):
+def get_sat_encoder(sat_encoder_name, dinov3_repo=None, dinov3_weights=None):
     sat_backbone, bb_size = sat_encoder_name.split("_")[:2]
     if sat_backbone == "dinov2":
         sat_encoder = torch.hub.load("facebookresearch/dinov2", f"dinov2_{bb_size}_reg_lc").backbone
         del sat_encoder.mask_token
         return sat_encoder
     if sat_backbone == "dinov3" or sat_encoder_name.startswith("dinov3"):
-        return get_dinov3_model(sat_encoder_name)
+        return get_dinov3_model(
+            sat_encoder_name, repo=dinov3_repo, weights=dinov3_weights
+        )
     raise ValueError(f"Unsupported satellite encoder: {sat_encoder_name}")
 
 
@@ -42,16 +44,16 @@ def get_sat_encoder_transform(sat_encoder_name):
         raise ValueError("Unsupported satellite encoder")
 
 
-def get_dinov3_model(model_name):
+def get_dinov3_model(model_name, repo=None, weights=None):
     """Load a local DINOv3 backbone for satellite image encoding."""
     if not model_name.startswith("dinov3"):
         raise ValueError(f"Unsupported model name: {model_name}")
-    dinov3_dir = os.environ.get("DINOV3_REPO")
-    weights = os.environ.get("DINOV3_WEIGHTS")
+    dinov3_dir = repo or os.environ.get("DINOV3_REPO")
+    weights = weights or os.environ.get("DINOV3_WEIGHTS")
     if not dinov3_dir or not weights:
         raise RuntimeError(
-            "DINOv3 encoding requires DINOV3_REPO (local torch.hub checkout) "
-            "and DINOV3_WEIGHTS (checkpoint file)."
+            "DINOv3 encoding requires dinov3_repo and dinov3_weights in paths.yaml "
+            "(or DINOV3_REPO / DINOV3_WEIGHTS env vars)."
         )
     return torch.hub.load(dinov3_dir, "dinov3_vitl16", source="local", weights=weights)
 

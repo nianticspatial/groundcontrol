@@ -81,6 +81,8 @@ def create_pipeline(
             "spherical_sampling": model_config.get("spherical_sampling", False),
             "reference_translation_noise_m": model_config.get("reference_translation_noise_m", 0.0),
             "reference_rotation_noise_deg": model_config.get("reference_rotation_noise_deg", 0.0),
+            "dinov3_repo": paths_config.get("dinov3_repo"),
+            "dinov3_weights": paths_config.get("dinov3_weights"),
         }
     )
     additional_model_kwargs["embedding_dim"] = model_config.get("embedding_dim", 256)

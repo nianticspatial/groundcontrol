@@ -17,9 +17,7 @@ def get_dataset_config(ds_configs_path: str, ds_name: str) -> DictConfig | ListC
     )
     if not config_path.exists():
         raise FileNotFoundError(f"Dataset config file not found: {config_path}")
-    ds_config = OmegaConf.load(config_path)
-    OmegaConf.resolve(ds_config)
-    return ds_config
+    return OmegaConf.load(config_path)
 
 
 def get_datasets(datasets_config: DictConfig, mode: str):
@@ -33,6 +31,10 @@ def get_datasets(datasets_config: DictConfig, mode: str):
             ds_name = ds_name_or_config.name
             ds_config = ds_name_or_config
         ds_config.resolution = datasets_config.resolution
+        if datasets_config.get("data_dir") is not None:
+            ds_config.data_dir = datasets_config.data_dir
+        if datasets_config.get("satellite_dir") is not None:
+            ds_config.satellite_dir = datasets_config.satellite_dir
         if ds_name == "argoverse":
             ds = ArgoverseDataset(ds_config, mode=mode)
         elif ds_name == "metropolis":

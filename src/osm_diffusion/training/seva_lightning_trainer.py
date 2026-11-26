@@ -89,8 +89,15 @@ class SevaLightningModule(pl.LightningModule):
         self.val_lpips = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
 
         if cfg.validation.get("semeval", False):
-            self.val_dino = DINOv1SimilarityMeasure()
-            self.val_segany = SegAnySimilarityMeasure()
+            paths = cfg.get("paths", {})
+            dino_weights = paths.get("dino_weights")
+            sam_weights = paths.get("sam_weights")
+            if not dino_weights or not sam_weights:
+                raise ValueError(
+                    "validation.semeval requires dino_weights and sam_weights in paths.yaml"
+                )
+            self.val_dino = DINOv1SimilarityMeasure(dino_model_weights_path=dino_weights)
+            self.val_segany = SegAnySimilarityMeasure(sam_model_weights_path=sam_weights)
 
         # List to store validation outputs for image logging
         self.validation_step_outputs = {}

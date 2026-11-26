@@ -1,0 +1,21 @@
+# Copy to paths.yaml and fill in local locations:
+#   cp src/osm_diffusion/configs/paths.example.yaml src/osm_diffusion/configs/paths.yaml
+#
+# paths.yaml is gitignored.
+
+checkpoint_path: /path/to/eval1.ckpt
+output_dir: outputs/metropolis
+
+pretrained_weights_path: /path/to/svc_checkpoint
+vae_ckpt_path: /path/to/sd_2_1_vae
+clip_hf_hub_path: /path/to/hf_hub/hub
+
+data_dir: /path/to/metropolis
+satellite_dir: /path/to/metropolis/sat_preprocessed
+
+dinov3_repo: /path/to/dinov3
+dinov3_weights: /path/to/dinov3_vitl16.pth
+
+# Optional — required only when validation.semeval is true
+dino_weights: null
+sam_weights: null

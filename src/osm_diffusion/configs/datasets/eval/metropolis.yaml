@@ -1,5 +1,5 @@
 name: metropolis
-data_dir: ${oc.env:METROPOLIS_DATA_DIR}
+# data_dir / satellite_dir are injected from paths.yaml at load time
 resolution: 576
 sampling_interval: 1
 start_offset_timestamps: 3
@@ -9,7 +9,6 @@ num_subsample_cameras: 3
 cropping_method: center
 temporal_window_size: 7
 num_max_images: 22
-satellite_dir: ${oc.env:METROPOLIS_SATELLITE_DIR}
 use_satellite: true
 input_camera_names: ["CAM_FRONT"]
 target_camera_names: ["CAM_LEFT", "CAM_RIGHT"]

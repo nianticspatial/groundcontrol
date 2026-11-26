@@ -1,17 +1,10 @@
-# Metropolis inference: dual CFG (sat=3, img=2). Satellite images are encoded with DINOv3.
-# Paths come from environment variables (see README).
+# Metropolis inference: dual CFG (sat=3, img=2).
+# Local machine paths live in paths.yaml (see paths.example.yaml).
 #
 #   python -m osm_diffusion.training.eval --config src/osm_diffusion/configs/infer_metropolis.yaml
 
 inference:
-  checkpoint_path: ${oc.env:GC_CHECKPOINT}
-  output_dir: ${oc.env:GC_OUTPUT_DIR,outputs/metropolis}
   validation_debug_dir: metropolis_576_dual_cfg_sat3_img2
-
-paths:
-  pretrained_weights_path: ${oc.env:GC_PRETRAINED_WEIGHTS}
-  vae_ckpt_path: ${oc.env:GC_VAE_PATH}
-  clip_hf_hub_path: ${oc.env:GC_CLIP_HF_HUB}
 
 data:
   datasets:

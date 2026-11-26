@@ -1,8 +1,7 @@
 """
 DINOv1 similarity metric for semantic evaluation.
 
-Set GC_DINO_WEIGHTS to the DINO ViT-B/16 checkpoint path, or pass
-dino_model_weights_path explicitly.
+Pass dino_model_weights_path, or set dino_weights in paths.yaml / GC_DINO_WEIGHTS.
 """
 
 import argparse

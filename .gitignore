@@ -6,6 +6,8 @@ dist/
 build/
 .venv/
 .env
+# Machine-local paths (copy from paths.example.yaml)
+src/osm_diffusion/configs/paths.yaml
 outputs
 outputs/
 *.ckpt

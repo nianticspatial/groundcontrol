@@ -33,6 +33,8 @@ class SatelliteRayGuidedCAPipeline(SatelliteSevaPipeline):
         sat_encoder_name: str = "dinov2_vits14",
         sat_use_dpt_head: bool = False,
         sat_dpt_head_config: dict | None = None,
+        dinov3_repo: str | None = None,
+        dinov3_weights: str | None = None,
         ray_pos_enc_freqs: int = 10,
         add_positional_encoding: bool = True,
         position_encoding_scale: float = 1.0,
@@ -60,7 +62,11 @@ class SatelliteRayGuidedCAPipeline(SatelliteSevaPipeline):
         if self.use_sat_dpt_head:
             raise RuntimeError("This release does not include a DPT satellite head.")
         print("Initializing satellite encoder...")
-        self.sat_encoder = sat_utils.get_sat_encoder(sat_encoder_name)
+        self.sat_encoder = sat_utils.get_sat_encoder(
+            sat_encoder_name,
+            dinov3_repo=dinov3_repo,
+            dinov3_weights=dinov3_weights,
+        )
         self.sat_encoder.to(self.device)
         if not train_sat_encoder:
             self.sat_encoder.eval()
