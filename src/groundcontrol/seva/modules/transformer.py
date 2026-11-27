@@ -8,8 +8,8 @@ from einops import rearrange, repeat
 from torch import nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from osm_diffusion.seva.modules.rope_attn import CrossAttentionRope
-from osm_diffusion.training.rope import PositionGetter, RotaryPositionEmbedding2D
+from groundcontrol.seva.modules.rope_attn import CrossAttentionRope
+from groundcontrol.training.rope import PositionGetter, RotaryPositionEmbedding2D
 
 
 class PositionalEncoding(nn.Module):

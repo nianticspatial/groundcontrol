@@ -4,7 +4,7 @@ import safetensors.torch
 import torch
 from huggingface_hub import hf_hub_download
 
-from osm_diffusion.seva.model import Seva, SevaParams
+from groundcontrol.seva.model import Seva, SevaParams
 
 
 def seed_everything(seed: int = 0):

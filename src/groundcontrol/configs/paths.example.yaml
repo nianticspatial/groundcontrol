@@ -1,6 +1,6 @@
 # Prefer: python scripts/download_checkpoints.py
 # Or copy this file and fill in local locations:
-#   cp src/osm_diffusion/configs/paths.example.yaml src/osm_diffusion/configs/paths.yaml
+#   cp src/groundcontrol/configs/paths.example.yaml src/groundcontrol/configs/paths.yaml
 #
 # paths.yaml is gitignored.
 

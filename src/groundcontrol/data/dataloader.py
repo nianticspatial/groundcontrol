@@ -7,8 +7,8 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-from osm_diffusion.data.av2_dataset import ArgoverseDataset
-from osm_diffusion.data.metropolis_dataset import MetropolisDataset
+from groundcontrol.data.av2_dataset import ArgoverseDataset
+from groundcontrol.data.metropolis_dataset import MetropolisDataset
 
 
 def get_dataset_config(ds_configs_path: str, ds_name: str) -> DictConfig | ListConfig:

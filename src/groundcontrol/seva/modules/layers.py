@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from einops import repeat
 from torch import nn
 
-from osm_diffusion.seva.modules.transformer import (
+from groundcontrol.seva.modules.transformer import (
     MultiviewTransformer,
     SatelliteMultiviewTransformerWithBlocks,
 )

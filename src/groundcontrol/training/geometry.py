@@ -1,6 +1,6 @@
 import torch
 
-import osm_diffusion.seva.geometry as seva_geometry
+import groundcontrol.seva.geometry as seva_geometry
 
 DEFAULT_FOV_RAD = 0.9424777960769379  # 54 degrees by default
 

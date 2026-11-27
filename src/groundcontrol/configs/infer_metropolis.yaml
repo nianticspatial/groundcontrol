@@ -1,7 +1,7 @@
 # Metropolis inference: dual CFG (sat=3, img=2).
 # Local machine paths live in paths.yaml (see paths.example.yaml).
 #
-#   python -m osm_diffusion.training.eval --config src/osm_diffusion/configs/infer_metropolis.yaml
+#   python -m groundcontrol.training.eval --config src/groundcontrol/configs/infer_metropolis.yaml
 
 inference:
   validation_debug_dir: metropolis_576_dual_cfg_sat3_img2

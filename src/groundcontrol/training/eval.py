@@ -17,14 +17,14 @@ import torch
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from osm_diffusion.data import dataloader
-from osm_diffusion.data.satellite_perturbations import (
+from groundcontrol.data import dataloader
+from groundcontrol.data.satellite_perturbations import (
     SatellitePerturbationConfig,
     SatellitePerturbationDataset,
 )
-from osm_diffusion.training import seva_lightning_trainer
-from osm_diffusion.training.config_loader import load_inference_config
-from osm_diffusion.training.ema import EMAUnetAveraging
+from groundcontrol.training import seva_lightning_trainer
+from groundcontrol.training.config_loader import load_inference_config
+from groundcontrol.training.ema import EMAUnetAveraging
 
 
 @dataclass

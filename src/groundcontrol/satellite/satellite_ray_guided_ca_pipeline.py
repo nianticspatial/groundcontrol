@@ -7,10 +7,10 @@ import torch.nn.functional as F
 from einops import rearrange
 from torchvision import transforms
 
-import osm_diffusion.satellite.viz as viz_utils
-from osm_diffusion.satellite import utils as sat_utils
-from osm_diffusion.satellite.satellite_seva_pipeline import SatelliteSevaPipeline
-from osm_diffusion.seva.modules.transformer import PositionalEncoding
+import groundcontrol.satellite.viz as viz_utils
+from groundcontrol.satellite import utils as sat_utils
+from groundcontrol.satellite.satellite_seva_pipeline import SatelliteSevaPipeline
+from groundcontrol.seva.modules.transformer import PositionalEncoding
 
 
 def get_satellite_feature_dim(sat_encoder_name: str) -> int:

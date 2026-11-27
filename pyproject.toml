@@ -1,5 +1,5 @@
 [project]
-name = "osm_diffusion"
+name = "groundcontrol"
 version = "0.1.0"
 description = "Inference code for the satellite-conditioned SEVA model."
 requires-python = ">=3.12"

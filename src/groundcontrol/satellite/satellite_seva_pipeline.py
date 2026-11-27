@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from osm_diffusion.training.seva_pipeline import SevaPipeline
+from groundcontrol.training.seva_pipeline import SevaPipeline
 
 
 class SatelliteSevaPipeline(SevaPipeline):

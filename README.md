@@ -50,7 +50,7 @@ If the CUDA build in `environment.yml` does not match your machine, install PyTo
 
 ## Checkpoints
 
-Local weight and data locations live in `src/osm_diffusion/configs/paths.yaml` (gitignored). Model/run settings stay in `infer_metropolis.yaml` (model `satellite_ray_guided_ca`, dual CFG sat=3 / img=2).
+Local weight and data locations live in `src/groundcontrol/configs/paths.yaml` (gitignored). Model/run settings stay in `infer_metropolis.yaml` (model `satellite_ray_guided_ca`, dual CFG sat=3 / img=2).
 
 **Option A — download script.** Use [`scripts/download_checkpoints.py`](scripts/download_checkpoints.py) to fetch weights into `checkpoints/` and write `paths.yaml`:
 
@@ -64,8 +64,8 @@ This only works if you are logged into Hugging Face and have access to every gat
 **Option B — manual.** Download the assets below yourself, then copy the example paths file and point each key at your local files:
 
 ```bash
-cp src/osm_diffusion/configs/paths.example.yaml \
-   src/osm_diffusion/configs/paths.yaml
+cp src/groundcontrol/configs/paths.example.yaml \
+   src/groundcontrol/configs/paths.yaml
 ```
 
 | Model | Where to get it | `paths.yaml` key |
@@ -81,8 +81,8 @@ cp src/osm_diffusion/configs/paths.example.yaml \
 ## Run
 
 ```bash
-python -m osm_diffusion.training.eval \
-  --config src/osm_diffusion/configs/infer_metropolis.yaml
+python -m groundcontrol.training.eval \
+  --config src/groundcontrol/configs/infer_metropolis.yaml
 ```
 
 Optional overrides: `--checkpoint-path`, `--output-path`, `--limit-val-batches`.

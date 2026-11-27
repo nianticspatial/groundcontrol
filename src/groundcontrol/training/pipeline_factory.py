@@ -1,14 +1,14 @@
 import torch
 
-import osm_diffusion.seva.utils as seva_utils
-from osm_diffusion.satellite.satellite_ray_guided_ca_pipeline import (
+import groundcontrol.seva.utils as seva_utils
+from groundcontrol.satellite.satellite_ray_guided_ca_pipeline import (
     SatelliteRayGuidedCAPipeline,
 )
-from osm_diffusion.seva.model import SevaParams
-from osm_diffusion.seva.modules.autoencoder import AutoEncoder
-from osm_diffusion.seva.modules.conditioner import CLIPConditioner
-from osm_diffusion.seva.satellite_model import SatelliteRayGuidedCA
-from osm_diffusion.training.ddpm_scheduler import DDPMTrainingScheduler
+from groundcontrol.seva.model import SevaParams
+from groundcontrol.seva.modules.autoencoder import AutoEncoder
+from groundcontrol.seva.modules.conditioner import CLIPConditioner
+from groundcontrol.seva.satellite_model import SatelliteRayGuidedCA
+from groundcontrol.training.ddpm_scheduler import DDPMTrainingScheduler
 
 # Public release name for the satellite ray-guided cross-attention model.
 MODEL_NAME = "satellite_ray_guided_ca"

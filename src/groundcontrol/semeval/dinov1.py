@@ -22,7 +22,7 @@ from torchvision import models as torchvision_models
 from torchvision import transforms as pth_transforms
 from tqdm import tqdm
 
-from osm_diffusion.semeval import dino_utils as vits
+from groundcontrol.semeval import dino_utils as vits
 
 dino_normalize = pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 

@@ -11,7 +11,7 @@ from omegaconf import ListConfig
 from PIL import Image
 from pyquaternion import Quaternion
 
-from osm_diffusion.data.generic_mvs_dataset import GenericMVSDataset
+from groundcontrol.data.generic_mvs_dataset import GenericMVSDataset
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,2 @@
+from groundcontrol.semeval.dinov1 import DINOv1SimilarityMeasure
+from groundcontrol.semeval.segany import SegAnySimilarityMeasure

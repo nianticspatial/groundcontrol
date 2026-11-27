@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTDIR = ROOT / "checkpoints"
-PATHS_YAML = ROOT / "src" / "osm_diffusion" / "configs" / "paths.yaml"
+PATHS_YAML = ROOT / "src" / "groundcontrol" / "configs" / "paths.yaml"
 
 GC_REPO = "AkshayKrishnan/groundcontrol"
 GC_FILE = "groundcontrol.ckpt"

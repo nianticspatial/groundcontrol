@@ -4,7 +4,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from osm_diffusion.seva.modules.layers import (
+from groundcontrol.seva.modules.layers import (
     Downsample,
     GroupNorm32,
     ResBlock,
@@ -12,7 +12,7 @@ from osm_diffusion.seva.modules.layers import (
     Upsample,
     timestep_embedding,
 )
-from osm_diffusion.seva.modules.transformer import (
+from groundcontrol.seva.modules.transformer import (
     MultiviewTransformer,
     SatelliteMultiviewTransformerWithBlocks,
 )

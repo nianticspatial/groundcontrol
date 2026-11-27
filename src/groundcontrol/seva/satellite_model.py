@@ -6,9 +6,9 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from osm_diffusion.seva.model import Seva, SevaParams
-from osm_diffusion.seva.modules.layers import timestep_embedding
-from osm_diffusion.seva.modules.transformer import (
+from groundcontrol.seva.model import Seva, SevaParams
+from groundcontrol.seva.modules.layers import timestep_embedding
+from groundcontrol.seva.modules.transformer import (
     MultiviewTransformer,
     SatelliteMultiviewTransformerWithBlocks,
 )

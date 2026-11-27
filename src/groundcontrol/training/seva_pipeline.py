@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-import osm_diffusion.training.geometry as geometry_utils
+import groundcontrol.training.geometry as geometry_utils
 
 
 def append_dims(x: torch.Tensor, target_dims: int) -> torch.Tensor:

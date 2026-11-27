@@ -15,23 +15,23 @@ from torch.optim import AdamW
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-import osm_diffusion.training.viz as viz_utils
-from osm_diffusion.semeval import DINOv1SimilarityMeasure, SegAnySimilarityMeasure
-from osm_diffusion.seva import utils as seva_utils
-from osm_diffusion.seva.model import SevaEncoder
-from osm_diffusion.training import utils
-from osm_diffusion.training.lora_utils import (
+import groundcontrol.training.viz as viz_utils
+from groundcontrol.semeval import DINOv1SimilarityMeasure, SegAnySimilarityMeasure
+from groundcontrol.seva import utils as seva_utils
+from groundcontrol.seva.model import SevaEncoder
+from groundcontrol.training import utils
+from groundcontrol.training.lora_utils import (
     extract_lora_state_dict,
     inject_lora_into_linears,
 )
-from osm_diffusion.training.loss_weighting import (
+from groundcontrol.training.loss_weighting import (
     DiffusionLossWeighting,
     EDMWeighting,
     UnitWeighting,
 )
-from osm_diffusion.training.pipeline_factory import create_pipeline
-from osm_diffusion.training.seva_pipeline import SevaPipeline, append_dims
-from osm_diffusion.training.utils import update_checkpoint_with_norm3_to_norm4
+from groundcontrol.training.pipeline_factory import create_pipeline
+from groundcontrol.training.seva_pipeline import SevaPipeline, append_dims
+from groundcontrol.training.utils import update_checkpoint_with_norm3_to_norm4
 
 logger = logging.getLogger(__name__)
 
