@@ -37,7 +37,6 @@ satellite scene layout—especially when the target has little overlap with the 
 
 This repository releases inference code for Metropolis. See the
 [project page](https://nianticspatial.github.io/groundcontrol/) for paper, videos, and results.
-Weights and datasets are not included.
 
 ## Setup
 
@@ -49,18 +48,35 @@ pip install -e .
 
 If the CUDA build in `environment.yml` does not match your machine, install PyTorch separately, then `pip install -r requirements.txt`.
 
-## Configure paths
+## Checkpoints
 
-Copy the example paths file and point each entry at your local data and weights:
+Local weight and data locations live in `src/osm_diffusion/configs/paths.yaml` (gitignored). Model/run settings stay in `infer_metropolis.yaml` (model `satellite_ray_guided_ca`, dual CFG sat=3 / img=2).
+
+**Option A — download script.** Use [`scripts/download_checkpoints.py`](scripts/download_checkpoints.py) to fetch weights into `checkpoints/` and write `paths.yaml`:
+
+```bash
+hf auth login
+python scripts/download_checkpoints.py
+```
+
+This only works if you are logged into Hugging Face and have access to every gated dependency repo — open each model page below and accept its terms/permissions before running the script. DINOv3 weights are gated separately by Meta; pass `--dinov3-url` after approval. Useful flags: `--outdir`, `--with-semeval`, `--dinov3-url <url>`. Afterward, set `data_dir` and `satellite_dir` to your Metropolis data.
+
+**Option B — manual.** Download the assets below yourself, then copy the example paths file and point each key at your local files:
 
 ```bash
 cp src/osm_diffusion/configs/paths.example.yaml \
    src/osm_diffusion/configs/paths.yaml
 ```
 
-`paths.yaml` is gitignored. Model/run settings stay in
-`src/osm_diffusion/configs/infer_metropolis.yaml`
-(model `satellite_ray_guided_ca`, dual CFG sat=3 / img=2).
+| Model | Where to get it | `paths.yaml` key |
+| --- | --- | --- |
+| GroundControl | [AkshayKrishnan/groundcontrol](https://huggingface.co/AkshayKrishnan/groundcontrol) (`groundcontrol.ckpt`) | `checkpoint_path` |
+| SEVA (Stable Virtual Camera) backbone | [stabilityai/stable-virtual-camera](https://huggingface.co/stabilityai/stable-virtual-camera) | `pretrained_weights_path` |
+| Stable Diffusion 2.1 VAE | [stabilityai/stable-diffusion-2-1-base](https://huggingface.co/stabilityai/stable-diffusion-2-1-base) (`vae` subfolder) | `vae_ckpt_path` |
+| OpenCLIP ViT-H/14 (`laion2b_s32b_b79k`) | Hugging Face Hub via [open_clip](https://github.com/mlfoundations/open_clip) | `clip_hf_hub_path` |
+| DINOv3 ViT-L/16 | [DINOv3 downloads](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/) + [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) | `dinov3_repo`, `dinov3_weights` |
+| DINOv1 (optional, semantic eval) | [facebookresearch/dino](https://github.com/facebookresearch/dino) | `dino_weights` |
+| SAM (optional, semantic eval) | [facebookresearch/segment-anything](https://github.com/facebookresearch/segment-anything#model-checkpoints) | `sam_weights` |
 
 ## Run
 
